@@ -136,9 +136,9 @@ __global__ void kernel_qff_forward(
     const float freq = pow(2.0, freq_base);
 
     // first compute sinusoidal coeffs
-    const float px = points(b, 0);
-    const float py = points(b, 1);
-    const float pz = points(b, 2);
+    const float px = points(0, b);
+    const float py = points(1, b);
+    const float pz = points(2, b);
 
     const float sx = __sinf(freq * px);
     const float sy = __sinf(freq * py);
@@ -149,8 +149,10 @@ __global__ void kernel_qff_forward(
 
     for (uint32_t c = 0; c < C; c++){
         const T* fv = features + c * RRR;
-        outputs(b, f * 2 * C + 0 * C + c)= trilinear_interp(fv + 0 * C * RRR, R, sx, sy, sz);
-        outputs(b, f * 2 * C + 1 * C + c)= trilinear_interp(fv + 1 * C * RRR, R, cx, cy, cz);
+        // Bx(F2C+P)
+
+        outputs(f * 2 * C + 0 * C + c, b)= trilinear_interp(fv + 0 * C * RRR, R, sx, sy, sz);
+        outputs(f * 2 * C + 1 * C + c, b)= trilinear_interp(fv + 1 * C * RRR, R, cx, cy, cz);
     }
 }
 
@@ -182,9 +184,9 @@ __global__ void kernel_qff_backward(
     const float freq = pow(2.0, freq_base);
 
     // first compute sinusoidal coeffs
-    const float px = points(b, 0);
-    const float py = points(b, 1);
-    const float pz = points(b, 2);
+    const float px = points(0, b);
+    const float py = points(1, b);
+    const float pz = points(2, b);
 
     const float sx = __sinf(freq * px);
     const float sy = __sinf(freq * py);
@@ -197,8 +199,8 @@ __global__ void kernel_qff_backward(
         T* gf = grad_features + c * R*R*R;
 
         // compute grad features
-        grad_trilinear_interp(gf + 0 * C * RRR, R, sx, sy, sz, grad_output(b, f * 2 * C + c + 0 * C));
-        grad_trilinear_interp(gf + 1 * C * RRR, R, cx, cy, cz, grad_output(b, f * 2 * C + c + 1 * C)); 
+        grad_trilinear_interp(gf + 0 * C * RRR, R, sx, sy, sz, grad_output(f * 2 * C + c + 0 * C, b));
+        grad_trilinear_interp(gf + 1 * C * RRR, R, cx, cy, cz, grad_output(f * 2 * C + c + 1 * C, b)); 
     }
 }
 
@@ -215,7 +217,8 @@ public:
 	  m_n_features{n_features}, m_n_quants{n_quants}, m_n_frequencies{n_frequencies}, 
 	  m_n_dims_to_encode{n_dims_to_encode} 
 	{
-		m_n_output_dims = m_n_dims_to_encode * m_n_frequencies * 2 * m_n_features;
+		m_n_output_dims = m_n_frequencies * 2 * m_n_features;
+        m_n_params = m_n_quants * m_n_quants * m_n_quants * 2 * m_n_frequencies * m_n_features;
 	}
 
 	std::unique_ptr<Context> forward_impl(
@@ -312,6 +315,16 @@ public:
 		CHECK_THROW(padded_output_width >= m_n_output_dims);
 		m_n_to_pad = padded_output_width - m_n_output_dims;
 	}
+    void set_params_impl(T* params, T* inference_params, T* gradients) override { }
+
+	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
+		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
+		generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
+	}
+    size_t n_params() const override {
+		return m_n_params;
+	}
+
 
 	uint32_t required_output_alignment() const override {
 		return 1;
