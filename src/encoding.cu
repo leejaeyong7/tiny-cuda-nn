@@ -35,6 +35,7 @@
 #include <tiny-cuda-nn/encodings/grid.h>
 #include <tiny-cuda-nn/encodings/identity.h>
 #include <tiny-cuda-nn/encodings/oneblob.h>
+#include <tiny-cuda-nn/encodings/qff.h>
 #include <tiny-cuda-nn/encodings/spherical_harmonics.h>
 #include <tiny-cuda-nn/encodings/triangle_wave.h>
 
@@ -143,6 +144,18 @@ void register_builtin_encodings() {
 	};
 	register_encoding<T>("OneBlobFrequency", nrc_factory);
 	register_encoding<T>("NRC", nrc_factory);
+
+	register_encoding<T>("QFF", [](uint32_t n_dims_to_encode, const json& encoding) {
+
+		return new QFF<T>{
+			encoding.value("log2_min_freq", 0u),
+			encoding.value("log2_max_freq", 6u),
+			encoding.value("n_features", 4u),
+			encoding.value("n_quants", 64u),
+			encoding.value("n_frequencies", 6u),
+			n_dims_to_encode
+		};
+	});
 }
 
 template <typename T>
