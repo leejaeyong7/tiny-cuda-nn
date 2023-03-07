@@ -180,22 +180,31 @@ __global__ void kernel_qff_forward(
     const float py = points(1, b);
     const float pz = points(2, b);
 
-    const T ix = freq * px;
-    const T iy = freq * py;
-    const T iz = freq * pz;
+    const uint32_t c2 = blockIdx.z;
+    const uint32_t c = c2 / 2;
+    const uint32_t s = c2 % 2;
+    features += f*2*C*RRR + s*C*RRR + c*RRR;
+    const float sx = (s == 0) ? __sinf(freq * px) : __cosf(freq * px);
+    const float sy = (s == 0) ? __sinf(freq * py) : __cosf(freq * py);
+    const float sz = (s == 0) ? __sinf(freq * pz) : __cosf(freq * pz);
+    outputs(f*2*C + s*C + c, b) = trilinear_interp(features, R, sx, sy, sz);
 
-    TCNN_PRAGMA_UNROLL
-    for(uint32_t s = 0; s < 2; s++){
-        const T sx = (s == 0) ? __sinf(ix) : __cosf(ix);
-        const T sy = (s == 0) ? __sinf(iy) : __cosf(iy);
-        const T sz = (s == 0) ? __sinf(iz) : __cosf(iz);
+    // const T ix = freq * px;
+    // const T iy = freq * py;
+    // const T iz = freq * pz;
 
-        TCNN_PRAGMA_UNROLL
-        for(uint32_t c = 0; c < C; c++){
-            const T* fptr = features + f*2*C*RRR + s*C*RRR + c*RRR;
-            outputs(f*2*C + s*C + c, b) = trilinear_interp(fptr, R, sx, sy, sz);
-        }
-    }
+    // TCNN_PRAGMA_UNROLL
+    // for(uint32_t s = 0; s < 2; s++){
+    //     const T sx = (s == 0) ? __sinf(ix) : __cosf(ix);
+    //     const T sy = (s == 0) ? __sinf(iy) : __cosf(iy);
+    //     const T sz = (s == 0) ? __sinf(iz) : __cosf(iz);
+
+    //     TCNN_PRAGMA_UNROLL
+    //     for(uint32_t c = 0; c < C; c++){
+    //         const T* fptr = features + f*2*C*RRR + s*C*RRR + c*RRR;
+    //         outputs(f*2*C + s*C + c, b) = trilinear_interp(fptr, R, sx, sy, sz);
+    //     }
+    // }
 }
 
 
@@ -217,12 +226,6 @@ __global__ void kernel_qff_backward(
 	if (b>= B) return;
     const uint32_t f = blockIdx.y;
     const uint32_t RRR = R*R*R;
-    // const uint32_t c2 = blockIdx.z;
-    // const uint32_t c = c2 / 2;
-    // const uint32_t s = c2 % 2;
-
-    // setup gradient offset
-    // grad_features += f*2*C*RRR + s*C*RRR + c*RRR;
 
 	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) F;
     const float freq = scalbnf(1.0, freq_base);
@@ -232,29 +235,34 @@ __global__ void kernel_qff_backward(
     const float py = points(1, b);
     const float pz = points(2, b);
 
-    // const T sx = (s == 0) ? __sinf(freq * px) : __cosf(freq * px);
-    // const T sy = (s == 0) ? __sinf(freq * py) : __cosf(freq * py);
-    // const T sz = (s == 0) ? __sinf(freq * pz) : __cosf(freq * pz);
-    // grad_trilinear_interp(grad_features, R, sx, sy, sz, go);
+    const uint32_t c2 = blockIdx.z;
+    const uint32_t c = c2 / 2;
+    const uint32_t s = c2 % 2;
+    grad_features += f*2*C*RRR + s*C*RRR + c*RRR;
+    const float go = (float) grad_output(f*2*C + s*C + c, b);
+    const T sx = (s == 0) ? __sinf(freq * px) : __cosf(freq * px);
+    const T sy = (s == 0) ? __sinf(freq * py) : __cosf(freq * py);
+    const T sz = (s == 0) ? __sinf(freq * pz) : __cosf(freq * pz);
+    grad_trilinear_interp(grad_features, R, sx, sy, sz, go);
 
-    const T ix = freq * px;
-    const T iy = freq * py;
-    const T iz = freq * pz;
+    // const T ix = freq * px;
+    // const T iy = freq * py;
+    // const T iz = freq * pz;
 
-    TCNN_PRAGMA_UNROLL
-    for(uint32_t s = 0; s < 2; s++){
-        const T sx = (s == 0) ? __sinf(ix) : __cosf(ix);
-        const T sy = (s == 0) ? __sinf(iy) : __cosf(iy);
-        const T sz = (s == 0) ? __sinf(iz) : __cosf(iz);
+    // TCNN_PRAGMA_UNROLL
+    // for(uint32_t s = 0; s < 2; s++){
+    //     const T sx = (s == 0) ? __sinf(ix) : __cosf(ix);
+    //     const T sy = (s == 0) ? __sinf(iy) : __cosf(iy);
+    //     const T sz = (s == 0) ? __sinf(iz) : __cosf(iz);
 
-        TCNN_PRAGMA_UNROLL
-        for(uint32_t c = 0; c < C; c++){
-            const float go = (float) grad_output(f*2*C + s*C + c, b);
-            T* fptr = grad_features + f*2*C*RRR + s*C*RRR + c*RRR;
-            // outputs(f*2*C + s*C + c, b) = trilinear_interp(features, R, sx, sy, sz);
-            grad_trilinear_interp(fptr, R, sx, sy, sz, go);
-        }
-    }
+    //     TCNN_PRAGMA_UNROLL
+    //     for(uint32_t c = 0; c < C; c++){
+    //         const float go = (float) grad_output(f*2*C + s*C + c, b);
+    //         T* fptr = grad_features + f*2*C*RRR + s*C*RRR + c*RRR;
+    //         // outputs(f*2*C + s*C + c, b) = trilinear_interp(features, R, sx, sy, sz);
+    //         grad_trilinear_interp(fptr, R, sx, sy, sz, go);
+    //     }
+    // }
 }
 
 template <typename T>
@@ -291,7 +299,7 @@ public:
 			forward->dy_dx = GPUMatrix<float>{m_n_dims_to_encode * m_n_frequencies * 2, input.n(), stream};
 		}
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 1};
+		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2 * m_n_features};
 		kernel_qff_forward<T><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			m_n_frequencies, // F
@@ -333,7 +341,7 @@ public:
 
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 1};
+		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2 * m_n_features};
 		kernel_qff_backward<T><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			m_n_frequencies, // F
