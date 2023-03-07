@@ -178,7 +178,7 @@ __global__ void kernel_qff_backward(
     const uint32_t RRR = R*R*R;
 
     // setup gradient offset
-    // grad_features += f*2*C*R*R*R;
+    grad_features += f*2*C*R*R*R;
 
 	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) F;
     const float freq = pow(2.0, freq_base);
@@ -265,7 +265,8 @@ public:
 		bool use_inference_params = false,
 		EGradientMode param_gradients_mode = EGradientMode::Overwrite
 	) override {
-		if (!dL_dinput || padded_output_width() == 0) {
+        const uint32_t num_elements = input.n();
+        if ((!dL_dinput && param_gradients_mode == EGradientMode::Ignore) || padded_output_width() == 0 || num_elements == 0) {
 			return;
 		}
 
