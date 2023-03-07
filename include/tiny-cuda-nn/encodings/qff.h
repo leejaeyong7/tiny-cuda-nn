@@ -25,24 +25,25 @@ __device__ T trilinear_interp(
     const float y = ((sy + 1) * 0.5) * (R - 1);
     const float z = ((sz + 1) * 0.5) * (R - 1);
 
-    int i, j, k;
-    float wx, wy, wz;
-    const T * p;
+    const uint32_t x0 = min(max((uint32_t)floor(x), 0), R-1);
+    const uint32_t y0 = min(max((uint32_t)floor(y), 0), R-1);
+    const uint32_t z0 = min(max((uint32_t)floor(z), 0), R-1);
+    const uint32_t x1 = max(min((uint32_t)ceil(x), R-1), 0);
+    const uint32_t y1 = max(min((uint32_t)ceil(y), R-1), 0);
+    const uint32_t z1 = max(min((uint32_t)ceil(z), R-1), 0);
 
-    i = floor(x);
-    j = floor(y);
-    k = floor(z);
+    const float wx = x - x0;
+    const float wy = y - y0;
+    const float wz = z - z0;
 
-    wx = (x - i);
-    wy = (y - j);
-    wz = (z - k);
-
-    p = features + i + j*R + k*R*R;
     T result = 0;
 
     TCNN_PRAGMA_UNROLL
     for(int l = 0; l < 8; l++) {
-        const T* tp = p + (l & 0x01 ? 1 : 0) * R*R + (l & 0x02 ? 1 : 0) * R + (l & 0x04 ? 1 : 0);
+        const T* tp = features + \
+                      (l & 0x01 ? z1 : z0) * R*R + \
+                      (l & 0x02 ? y1 : y0) * R + \
+                      (l & 0x04 ? x1 : x0);
         result += *tp * (T)(
             (l & 0x04 ? wx : 1 - wx) *
             (l & 0x02 ? wy : 1 - wy) *
@@ -66,23 +67,23 @@ __device__ void grad_trilinear_interp(
     const float y = ((sy + 1) * 0.5) * (R - 1);
     const float z = ((sz + 1) * 0.5) * (R - 1);
 
-    int i, j, k;
-    float wx, wy, wz;
-    T * p;
+    const uint32_t x0 = min(max((uint32_t)floor(x), 0), R-1);
+    const uint32_t y0 = min(max((uint32_t)floor(y), 0), R-1);
+    const uint32_t z0 = min(max((uint32_t)floor(z), 0), R-1);
+    const uint32_t x1 = max(min((uint32_t)ceil(x), R-1), 0);
+    const uint32_t y1 = max(min((uint32_t)ceil(y), R-1), 0);
+    const uint32_t z1 = max(min((uint32_t)ceil(z), R-1), 0);
 
-    i = floor(x);
-    j = floor(y);
-    k = floor(z);
-
-    wx = (x - i);
-    wy = (y - j);
-    wz = (z - k);
-
-    p = grad_features + i + j*R + k*R*R;
+    const float wx = x - x0;
+    const float wy = y - y0;
+    const float wz = z - z0;
 
     TCNN_PRAGMA_UNROLL
     for(int l = 0; l < 8; l++) {
-        T* tp = p + (l & 0x01 ? 1 : 0) * R*R + (l & 0x02 ? 1 : 0) * R + (l & 0x04 ? 1 : 0);
+        T* tp = grad_features + \
+                (l & 0x01 ? z1 : z0) * R*R + \
+                (l & 0x02 ? y1 : y0) * R + \
+                (l & 0x04 ? x1 : x0);
         atomicAdd(tp, grad_output * (T)(
             (l & 0x04 ? wx : 1 - wx) *
             (l & 0x02 ? wy : 1 - wy) *
@@ -212,7 +213,7 @@ public:
 			forward->dy_dx = GPUMatrix<float>{m_n_dims_to_encode * m_n_frequencies * 2, input.n(), stream};
 		}
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2*m_n_features  };
+		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2 * m_n_features};
 		kernel_qff_forward<T><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			m_n_frequencies, // F
