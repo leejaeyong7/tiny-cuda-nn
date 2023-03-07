@@ -81,9 +81,9 @@ __device__ T trilinear_interp(
     return result;
 }
 
-template <typename T>
+// template <typename T>
 __device__ void grad_trilinear_interp(
-    T * __restrict__ grad_features, 
+    float * __restrict__ grad_features, 
     const uint32_t R, 
     const float sx, 
     const float sy, 
@@ -101,45 +101,17 @@ __device__ void grad_trilinear_interp(
     const uint32_t y1 = max(min((uint32_t)ceil(y), R-1), 0);
     const uint32_t z1 = max(min((uint32_t)ceil(z), R-1), 0);
 
-    // const float wx0 = x - x0;
-    // const float wy0 = y - y0;
-    // const float wz0 = z - z0;
-    // const float wx1 = 1 - wx0;
-    // const float wy1 = 1 - wy0;
-    // const float wz1 = 1 - wz0;
-
-    // const float f000 = (float)features[z0*R*R + y0 * R + x0];
-    // const float f001 = (float)features[z1*R*R + y0 * R + x0];
-    // const float f010 = (float)features[z0*R*R + y1 * R + x0];
-    // const float f011 = (float)features[z1*R*R + y1 * R + x0];
-    // const float f100 = (float)features[z0*R*R + y0 * R + x1];
-    // const float f101 = (float)features[z1*R*R + y0 * R + x1];
-    // const float f110 = (float)features[z0*R*R + y1 * R + x1];
-    // const float f111 = (float)features[z1*R*R + y1 * R + x1];
-
-    // const float f00 = f000 * wx0 + f100 * wx1;
-    // const float f01 = f001 * wx0 + f101 * wx1;
-    // const float f10 = f010 * wx0 + f110 * wx1;
-    // const float f11 = f011 * wx0 + f111 * wx1;
-
-    // const float f0 = f00 * wy0 + f10 * wy1;
-    // const float f1 = f01 * wy0 + f11 * wy1;
-
-    // const T f = (T)(f0 * wz0 + f1 * wz1);
-    
-    // return f;
-
     const float wx = x - x0;
     const float wy = y - y0;
     const float wz = z - z0;
 
     TCNN_PRAGMA_UNROLL
     for(int l = 0; l < 8; l++) {
-        T* tp = grad_features + \
+        float * tp = grad_features + \
                 (l & 0x01 ? z1 : z0) * R*R + \
                 (l & 0x02 ? y1 : y0) * R + \
                 (l & 0x04 ? x1 : x0);
-        atomicAdd(tp, (T)(grad_output * 
+        atomicAdd(tp, (grad_output * 
             (l & 0x04 ? wx : 1 - wx) *
             (l & 0x02 ? wy : 1 - wy) *
             (l & 0x01 ? wz : 1 - wz)
@@ -188,23 +160,6 @@ __global__ void kernel_qff_forward(
     const float sy = (s == 0) ? __sinf(freq * py) : __cosf(freq * py);
     const float sz = (s == 0) ? __sinf(freq * pz) : __cosf(freq * pz);
     outputs(f*2*C + s*C + c, b) = trilinear_interp(features, R, sx, sy, sz);
-
-    // const T ix = freq * px;
-    // const T iy = freq * py;
-    // const T iz = freq * pz;
-
-    // TCNN_PRAGMA_UNROLL
-    // for(uint32_t s = 0; s < 2; s++){
-    //     const T sx = (s == 0) ? __sinf(ix) : __cosf(ix);
-    //     const T sy = (s == 0) ? __sinf(iy) : __cosf(iy);
-    //     const T sz = (s == 0) ? __sinf(iz) : __cosf(iz);
-
-    //     TCNN_PRAGMA_UNROLL
-    //     for(uint32_t c = 0; c < C; c++){
-    //         const T* fptr = features + f*2*C*RRR + s*C*RRR + c*RRR;
-    //         outputs(f*2*C + s*C + c, b) = trilinear_interp(fptr, R, sx, sy, sz);
-    //     }
-    // }
 }
 
 
@@ -220,7 +175,7 @@ __global__ void kernel_qff_backward(
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
     // MatrixView<float> grad_features
-    T * __restrict__ grad_features       // Fx2xCxRxRxR
+    float * __restrict__ grad_features       // Fx2xCxRxRxR
 ) {
     const uint32_t b = blockIdx.x * blockDim.x + threadIdx.x;
 	if (b>= B) return;
@@ -240,29 +195,10 @@ __global__ void kernel_qff_backward(
     const uint32_t s = c2 % 2;
     grad_features += f*2*C*RRR + s*C*RRR + c*RRR;
     const float go = (float) grad_output(f*2*C + s*C + c, b);
-    const T sx = (s == 0) ? __sinf(freq * px) : __cosf(freq * px);
-    const T sy = (s == 0) ? __sinf(freq * py) : __cosf(freq * py);
-    const T sz = (s == 0) ? __sinf(freq * pz) : __cosf(freq * pz);
+    const float sx = (s == 0) ? __sinf(freq * px) : __cosf(freq * px);
+    const float sy = (s == 0) ? __sinf(freq * py) : __cosf(freq * py);
+    const float sz = (s == 0) ? __sinf(freq * pz) : __cosf(freq * pz);
     grad_trilinear_interp(grad_features, R, sx, sy, sz, go);
-
-    // const T ix = freq * px;
-    // const T iy = freq * py;
-    // const T iz = freq * pz;
-
-    // TCNN_PRAGMA_UNROLL
-    // for(uint32_t s = 0; s < 2; s++){
-    //     const T sx = (s == 0) ? __sinf(ix) : __cosf(ix);
-    //     const T sy = (s == 0) ? __sinf(iy) : __cosf(iy);
-    //     const T sz = (s == 0) ? __sinf(iz) : __cosf(iz);
-
-    //     TCNN_PRAGMA_UNROLL
-    //     for(uint32_t c = 0; c < C; c++){
-    //         const float go = (float) grad_output(f*2*C + s*C + c, b);
-    //         T* fptr = grad_features + f*2*C*RRR + s*C*RRR + c*RRR;
-    //         // outputs(f*2*C + s*C + c, b) = trilinear_interp(features, R, sx, sy, sz);
-    //         grad_trilinear_interp(fptr, R, sx, sy, sz, go);
-    //     }
-    // }
 }
 
 template <typename T>
@@ -333,10 +269,14 @@ public:
 
 		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
 
-        T* grid_gradient = this->gradients();
+        // If not, accumulate in a temporary buffer and cast later.
+        float * grid_gradient;
+        GPUMemoryArena::Allocation grid_gradient_tmp;
+        grid_gradient_tmp = allocate_workspace(stream, m_n_params * sizeof(float));
+        grid_gradient = (float*)grid_gradient_tmp.data();
 
         if (param_gradients_mode == EGradientMode::Overwrite) {
-            CUDA_CHECK_THROW(cudaMemsetAsync(grid_gradient, 0, m_n_params * sizeof(T), stream));
+            CUDA_CHECK_THROW(cudaMemsetAsync(grid_gradient, 0, m_n_params * sizeof(float), stream));
         }
 
 
@@ -354,7 +294,12 @@ public:
 			input.view(),
             grid_gradient
 			// dL_dinput->view()
+
         );
+
+        parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=grid_gradient] __device__ (size_t i) {
+            grad[i] = (T)grad_tmp[i];
+        });
 	}
 
 	uint32_t input_width() const override {
