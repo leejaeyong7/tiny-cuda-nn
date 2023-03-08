@@ -195,29 +195,37 @@ __global__ void kernel_qff_backward(
 	grad_nlinear_interp<GRAD_T, T, N_POS_DIMS, C>(grad_features, R, sc, grad_output, b, f*2*C + s*C);
 }
 
-template <typename T, uint32_t N_POS_DIMS=3, uint32_t C=4>
-class QFF : public Encoding<T> {
+template <typename T>
+class QFF: public Encoding<T> {
+public:
+	virtual uint32_t n_pos_dims() const = 0;
+	virtual uint32_t n_features() const = 0;
+};
+
+template <typename T, uint32_t N_POS_DIMS, uint32_t C>
+class QFFTemplated : public QFF<T> {
 #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
 	using grad_t = std::conditional_t<C == 1, float, T>;
 #else
 	using grad_t = float;
 #endif
 public:
-	QFF(uint32_t log2_min_freq,
-		uint32_t log2_max_freq,
-		uint32_t n_quants,
-		uint32_t n_frequencies)
+	QFFTemplated(uint32_t log2_min_freq,
+				 uint32_t log2_max_freq,
+				 uint32_t n_quants,
+				 uint32_t n_frequencies)
 	: m_log2_min_freq{log2_min_freq}, 
 	  m_log2_max_freq{log2_max_freq}, 
 	  m_n_quants{n_quants}, 
 	  m_n_frequencies{n_frequencies} 
 	{
 		m_n_output_dims = m_n_frequencies * 2 * C;
-		if (N_POS_DIMS == 2){
-			m_n_params = n_quants * n_quants * 2 * m_n_frequencies * C;
-		} else{
-			m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
-		}
+		m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
+		// if (N_POS_DIMS == 2){
+		// 	m_n_params = n_quants * n_quants * 2 * m_n_frequencies * C;
+		// } else{
+		// 	m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
+		// }
 	}
 
 	std::unique_ptr<Context> forward_impl(
@@ -337,6 +345,13 @@ public:
 		return m_n_params;
 	}
 
+	uint32_t n_pos_dims() const override {
+		return N_POS_DIMS;
+	}
+
+	uint32_t n_features() const override {
+		return C;
+	}
 
 	uint32_t required_output_alignment() const override {
 		return 1;
@@ -385,10 +400,10 @@ QFF<T>* create_qff_encoding_1(const json& encoding) {
 
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		case 1: return new QFF<T, N_POS_DIMS, 1>{ TCNN_QFF_PARAMS };
-		case 2: return new QFF<T, N_POS_DIMS, 2>{ TCNN_QFF_PARAMS };
-		case 4: return new QFF<T, N_POS_DIMS, 4>{ TCNN_QFF_PARAMS };
-		case 8: return new QFF<T, N_POS_DIMS, 8>{ TCNN_QFF_PARAMS };
+		case 1: return new QFFTemplated<T, N_POS_DIMS, 1>{ TCNN_QFF_PARAMS };
+		case 2: return new QFFTemplated<T, N_POS_DIMS, 2>{ TCNN_QFF_PARAMS };
+		case 4: return new QFFTemplated<T, N_POS_DIMS, 4>{ TCNN_QFF_PARAMS };
+		case 8: return new QFFTemplated<T, N_POS_DIMS, 8>{ TCNN_QFF_PARAMS };
 		default: throw std::runtime_error{"QFF: number of features must be 1, 2, 4 or 8"};
 	}
 #undef TCNN_QFF_PARAMS
@@ -397,7 +412,7 @@ QFF<T>* create_qff_encoding_1(const json& encoding) {
 template <typename T>
 QFF<T>* create_qff_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
-		case 2: return create_qff_encoding_1<T, 2>(encoding);
+		// case 2: return create_qff_encoding_1<T, 2>(encoding);
 		case 3: return create_qff_encoding_1<T, 3>(encoding);
 		default: throw std::runtime_error{"QFF: number of input dims must be 2,3 or 4."};
 	}
