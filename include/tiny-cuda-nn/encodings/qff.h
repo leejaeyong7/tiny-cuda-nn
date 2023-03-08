@@ -179,7 +179,7 @@ __global__ void kernel_qff_backward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) F;
+	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) (F - 1);
     const float freq = scalbnf(1.0, freq_base);
     const uint32_t Rs = pow(R, N_POS_DIMS);
 
