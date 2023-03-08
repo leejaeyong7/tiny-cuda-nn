@@ -213,8 +213,11 @@ public:
 	  m_n_frequencies{n_frequencies} 
 	{
 		m_n_output_dims = m_n_frequencies * 2 * C;
-		// m_n_params = pow(n_quants, N_POS_DIMS) * 2 * m_n_frequencies * C;
-		m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
+		if (N_POS_DIMS == 2){
+			m_n_params = n_quants * n_quants * 2 * m_n_frequencies * C;
+		} else{
+			m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
+		}
 	}
 
 	std::unique_ptr<Context> forward_impl(
@@ -382,10 +385,10 @@ QFF<T>* create_qff_encoding_1(const json& encoding) {
 
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		// case 1: return new QFF<T, N_POS_DIMS, 1>{ TCNN_QFF_PARAMS };
-		// case 2: return new QFF<T, N_POS_DIMS, 2>{ TCNN_QFF_PARAMS };
+		case 1: return new QFF<T, N_POS_DIMS, 1>{ TCNN_QFF_PARAMS };
+		case 2: return new QFF<T, N_POS_DIMS, 2>{ TCNN_QFF_PARAMS };
 		case 4: return new QFF<T, N_POS_DIMS, 4>{ TCNN_QFF_PARAMS };
-		// case 8: return new QFF<T, N_POS_DIMS, 8>{ TCNN_QFF_PARAMS };
+		case 8: return new QFF<T, N_POS_DIMS, 8>{ TCNN_QFF_PARAMS };
 		default: throw std::runtime_error{"QFF: number of features must be 1, 2, 4 or 8"};
 	}
 #undef TCNN_QFF_PARAMS
@@ -394,7 +397,7 @@ QFF<T>* create_qff_encoding_1(const json& encoding) {
 template <typename T>
 QFF<T>* create_qff_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
-		// case 2: return create_qff_encoding_1<T, 2>(encoding);
+		case 2: return create_qff_encoding_1<T, 2>(encoding);
 		case 3: return create_qff_encoding_1<T, 3>(encoding);
 		default: throw std::runtime_error{"QFF: number of input dims must be 2,3 or 4."};
 	}
