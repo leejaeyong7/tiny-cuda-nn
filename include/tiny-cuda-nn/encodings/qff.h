@@ -12,7 +12,7 @@
 #include <vector>
 
 TCNN_NAMESPACE_BEGIN
-static inline  __device__ uint32_t pow(const uint32_t base, const uint32_t exp) {
+static inline  __device__ uint32_t powu(const uint32_t base, const uint32_t exp) {
     uint32_t val = 1;
     for(int i = 0; i < exp; i++){
         val *= base;
@@ -41,7 +41,7 @@ __device__ void nlinear_interp(
 		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
 		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
 		w[i] = p - p0[i];
-		o[i] = pow(R, i);
+		o[i] = powu(R, i);
 	}
 
 	float results[C] = {0};
@@ -88,11 +88,11 @@ __device__ void grad_nlinear_interp(
 		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
 		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
 		w[i] = p - p0[i];
-		o[i] = pow(R, i);
+		o[i] = powu(R, i);
 	}
 
 	TCNN_PRAGMA_UNROLL
-	for(int l = 0; l < 8; l++) {
+	for(int l = 0; l < powu(2, N_POS_DIMS); l++) {
 		uint32_t offset = 0;
 		float weight = 1;
 
@@ -124,10 +124,9 @@ __device__ void grad_nlinear_interp(
 	}
 }
 
-// grad_point_helper<T, N_POS_DIMS, C>(grad_points, features, R, sc, dsc, grad_output, b,b*F*2*C+ f*2*C + s*C);
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_point_helper(
-    MatrixView<float> grad_points, 
+    float * grad_points, 
 	const T * __restrict__ features, 
     const uint32_t R, 
     const float sc[N_POS_DIMS], 
@@ -136,67 +135,66 @@ __device__ void grad_point_helper(
 	const uint32_t b,
 	const uint32_t out_offset 
 ){
-    // for b, r, r, rxc
+	// for b, r, r, rxc
     float w[N_POS_DIMS];
     float dw[N_POS_DIMS];
 	float p0[N_POS_DIMS];
 	float p1[N_POS_DIMS];
 	uint32_t o[N_POS_DIMS];
 
-	#pragma unroll
+	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < N_POS_DIMS; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
 		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
 		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
 		w[i] = p - p0[i];
-		o[i] = pow(R, i);
+		o[i] = powu(R, i);
 		dw[i] = dsc[i] * 0.5 * (R - 1);
 	}
 
     float results[N_POS_DIMS*C] = {0};
 
-    #pragma unroll
-    for(uint32_t l = 0; l < pow(2, N_POS_DIMS); l++){
+    TCNN_PRAGMA_UNROLL
+    for(uint32_t l = 0; l < powu(2, N_POS_DIMS); l++){
         uint32_t offset = 0;
         float weights[N_POS_DIMS] = {0};
 
-		#pragma unroll
+		TCNN_PRAGMA_UNROLL
 		for(uint32_t k = 0; k < N_POS_DIMS; k++){
-			weights[k] = 1;
+			weights[k] = 1.0;
 		}
 
-        #pragma unroll
+        TCNN_PRAGMA_UNROLL
         for(uint32_t i = 0; i < N_POS_DIMS; i++){
             const uint32_t inv_i = N_POS_DIMS - i - 1;
             offset += (l & (1 << inv_i) ? p1[i] : p0[i]) * o[i];
-            #pragma unroll
+            TCNN_PRAGMA_UNROLL
             for(uint32_t k  =0; k < N_POS_DIMS; k++){
                 weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) : 
                                          ((l & (1 << inv_i)) ? w[i] : 1 - w[i]);
             }
         }
         
-        #pragma unroll
+        TCNN_PRAGMA_UNROLL
         for(int c = 0; c < C; c++){
             float feature = (float)*(features + offset*C + c);
-            #pragma unroll
+            TCNN_PRAGMA_UNROLL
             for (int k = 0; k < N_POS_DIMS; k++){
                 results[k*C + c] += feature * weights[k];
             }
         }
     }
-    #pragma unroll
+    // TCNN_PRAGMA_UNROLL
     for(int c = 0; c < C; c++){
 		float go = (float)grad_output(out_offset + c, b);
-        #pragma unroll
+        // TCNN_PRAGMA_UNROLL
         for (int k = 0; k < N_POS_DIMS; k++){
-            atomicAdd(&grad_points(k, b), go * results[k*C + c]);
+            atomicAdd(grad_points + k, go * results[k*C + c]);
         }
     }
 }
 
 
-// grad_grad_helper<GRAD_T, T, N_POS_DIMS, C>(features, grad2_features, grad_grad_outputs, R, sc, dsc, dps, grad_output, b, b*F*2*C + f*2*C + s*C);
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_grad_helper(
     const T * __restrict__ features, 
@@ -217,51 +215,51 @@ __device__ void grad_grad_helper(
 	float p1[N_POS_DIMS];
 	uint32_t o[N_POS_DIMS];
 
-	#pragma unroll
+	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < N_POS_DIMS; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
 		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
 		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
 		w[i] = p - p0[i];
-		o[i] = pow(R, i);
-		dw[i] = dsc[i] * 0.5 * (R - 1) * dps[i];
+		o[i] = powu(R, i);
+		dw[i] = dsc[i] * 0.5 * (R - 1);
 	}
 
-    T results[N_POS_DIMS*C] = {0};
-    #pragma unroll
-    for(uint32_t l = 0; l < pow(2, N_POS_DIMS); l++){
+    float results[N_POS_DIMS*C] = {0};
+    TCNN_PRAGMA_UNROLL
+    for(uint32_t l = 0; l < powu(2, N_POS_DIMS); l++){
         uint32_t offset = 0;
         float weights[N_POS_DIMS] = {0};
 
-		#pragma unroll
+		TCNN_PRAGMA_UNROLL
 		for(uint32_t k = 0; k < N_POS_DIMS; k++){
 			weights[k] = 1;
 		}
 
-        #pragma unroll
+        TCNN_PRAGMA_UNROLL
         for(uint32_t i = 0; i < N_POS_DIMS; i++){
             const uint32_t inv_i = N_POS_DIMS - i - 1;
             offset += (l & (1 << inv_i) ? p1[i] : p0[i]) * o[i];
 
-            #pragma unroll
+            TCNN_PRAGMA_UNROLL
             for(uint32_t k = 0; k < N_POS_DIMS; k++){
                 weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) : 
                                          ((l & (1 << inv_i)) ? w[i] : 1 - w[i]);
             }
         }
-        #pragma unroll
+        TCNN_PRAGMA_UNROLL
         for(int c = 0; c < C; c++){
-            T feature = *(features + offset*C + c);
-            #pragma unroll
+            float feature = (float)*(features + offset*C + c);
+            TCNN_PRAGMA_UNROLL
             for (int k = 0; k < N_POS_DIMS; k++){
-                results[k*C + c] += feature * (T)weights[k];
+                results[k*C + c] += feature * weights[k] * dps[k];
             }
 		}
 
 		float g2f = 0;
-		#pragma unroll
+		TCNN_PRAGMA_UNROLL
 		for (int k = 0; k < N_POS_DIMS; k++){
-			g2f += weights[k];
+			g2f += weights[k] * dps[k];
 		}
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
 		if (C > 1 && std::is_same<GRAD_T, __half>::value) {
@@ -283,14 +281,14 @@ __device__ void grad_grad_helper(
 			}
 		}
     }
-    #pragma unroll
+    TCNN_PRAGMA_UNROLL
     for(int c = 0; c < C; c++){
-        T ggo = 0;
-        #pragma unroll
+        float ggo = 0;
+        TCNN_PRAGMA_UNROLL
         for (int k = 0; k < N_POS_DIMS; k++){
             ggo += results[k * C + c];
         }
-        grad_grad_output(out_offset + c, b) = ggo;
+        grad_grad_output(out_offset + c, b) = (T)ggo;
     }
 }
 
@@ -314,9 +312,9 @@ __global__ void kernel_qff_forward(
 	if (b>= B) return;
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
-	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) (F - 1);
-    const float freq = scalbnf(1.0, freq_base);
-    const uint32_t Rs = pow(R, N_POS_DIMS);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+    const float freq = powf(2.0, freq_base);
+    const uint32_t Rs = powu(R, N_POS_DIMS);
     features += f*2*Rs*C + s*Rs*C;
 
 	float sc[N_POS_DIMS];
@@ -347,9 +345,9 @@ __global__ void kernel_qff_backward_features(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) (F - 1);
-    const float freq = scalbnf(1.0, freq_base);
-    const uint32_t Rs = pow(R, N_POS_DIMS);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+    const float freq = powf(2.0, freq_base);
+    const uint32_t Rs = powu(R, N_POS_DIMS);
 
     grad_features += f*2*C*Rs + s*C*Rs;
 
@@ -373,7 +371,7 @@ __global__ void kernel_qff_backward_input(
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
-    MatrixView<float> grad_points,       // Bx3
+    float* __restrict__ grad_points,       // Bx3
 	T * __restrict__ features       // Fx2xRsxC
 ) {
     const uint32_t b = blockIdx.x * blockDim.x + threadIdx.x;
@@ -381,11 +379,11 @@ __global__ void kernel_qff_backward_input(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) (F - 1);
-    const float freq = scalbnf(1.0, freq_base);
-    const uint32_t Rs = pow(R, N_POS_DIMS);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+    const float freq = powf(2.0, freq_base);
+    const uint32_t Rs = powu(R, N_POS_DIMS);
 
-	// grad_points += b*N_POS_DIMS;
+	grad_points += b*N_POS_DIMS;
     features += f*2*C*Rs + s*C*Rs;
 
 	float sc[N_POS_DIMS];
@@ -398,7 +396,7 @@ __global__ void kernel_qff_backward_input(
 		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
 	}
 
-	grad_point_helper<T, N_POS_DIMS, C>(grad_points, features, R, sc, dsc, grad_output, b,b*F*2*C+ f*2*C + s*C);
+	grad_point_helper<T, N_POS_DIMS, C>(grad_points, features, R, sc, dsc, grad_output, b, f*2*C + s*C);
 }
 
 
@@ -424,9 +422,9 @@ __global__ void kernel_qff_backward_input_backward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = (float) (f * (max_log2_freq - min_log2_freq)) / (float) (F - 1);
-    const float freq = scalbnf(1.0, freq_base);
-    const uint32_t Rs = pow(R, N_POS_DIMS);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+    const float freq = powf(2.0, freq_base);
+    const uint32_t Rs = powu(R, N_POS_DIMS);
 
     features += f*2*C*Rs + s*C*Rs;
     grad2_features += f*2*C*Rs + s*C*Rs;
@@ -445,7 +443,7 @@ __global__ void kernel_qff_backward_input_backward(
 		dps[i] = dp;
 	}
 
-    grad_grad_helper<GRAD_T, T, N_POS_DIMS, C>(features, grad2_features, grad_grad_outputs, R, sc, dsc, dps, grad_output, b, b*F*2*C + f*2*C + s*C);
+    grad_grad_helper<GRAD_T, T, N_POS_DIMS, C>(features, grad2_features, grad_grad_outputs, R, sc, dsc, dps, grad_output, b, f*2*C + s*C);
 }
 
 
@@ -575,7 +573,10 @@ public:
 			return;
 		}
 
-		linear_kernel(kernel_qff_backward_input<T, N_POS_DIMS, C>, 0, stream,
+        if (param_gradients_mode == EGradientMode::Overwrite) {
+            CUDA_CHECK_THROW(cudaMemsetAsync(dL_dinput->data(), 0, num_elements * 3 * sizeof(float), stream));
+        }
+		kernel_qff_backward_input<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			m_n_frequencies, // F
 			m_n_quants, // Q
@@ -584,7 +585,7 @@ public:
 			m_n_to_pad, // P
 			dL_doutput.view(),
 			input.view(),
-			dL_dinput->view(),
+			dL_dinput->data(),
 			use_inference_params ? this->inference_params() : this->params()
 		);
 	}
@@ -621,19 +622,6 @@ public:
 
 		static constexpr uint32_t N_THREADS = 512;
 		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
-		// const uint32_t B, 
-		// const uint32_t F, 
-		// const uint32_t R,
-		// const uint32_t min_log2_freq, 
-		// const uint32_t max_log2_freq, 
-		// const uint32_t P,
-		// MatrixView<const T> grad_output,
-		// MatrixView<const float> points,      // Bx3
-		// MatrixView<float> grad_grad_points,  // Bx3
-		// const T * __restrict__ features,       // Fx2xRsxC
-		// GRAD_T* grad2_features,
-		// GRAD_T* grad_grad_outputs,
-
 		kernel_qff_backward_input_backward<grad_t, T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			m_n_frequencies, // F
@@ -649,6 +637,14 @@ public:
 			grad_grad_array,
 			dL_ddLdoutput->view()
         );
+		if (!std::is_same<float, T>::value) {
+			parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=grad_grad_array] __device__ (size_t i) {
+				// NOTE: maybe clip gradient since dy/dx__df can be very large?
+				// grad[i] = (T)min(max(grad_tmp[i], -511.5f), 511.5f);
+				grad[i] = (T)grad_tmp[i];
+			});
+		}
+
 	}
 
 	uint32_t input_width() const override {
