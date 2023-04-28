@@ -22,10 +22,11 @@ The following activation functions are supported:
 - `"Exponential"`
 - `"Sine"`
 - `"Sigmoid"` (the logistic function)
-- `"Squareplus"` (defined as `0.5 * (x + sqrt(x*x + 4))`)
-- `"Softplus"` (defined as `log(exp(x) + 1)`)
+- `"Squareplus"` (defined as `X = 10*x; 0.5 * (X + sqrt(X*X + 4)) / 10`)
+- `"Softplus"` (defined as `X = 10*x; log(exp(X) + 1) / 10`)
 - `"Tanh"` (defined as `(exp(x) - exp(-x)) / (exp(x) + exp(-x))`)
 
+The factor and divisor `10` in the `Squareplus` and `Softplus` activations can be thought of as "zooming out" such that these smooth activations more closely resembly the ReLU. If this is undesired in your use case, you can change the compile-time constant `K_ACT` in `include/tiny-cuda-nn/common_device.h`.
 
 ### Fully Fused MLP
 
@@ -89,7 +90,9 @@ Allows composing multiple encodings. The following example replicates the Neural
 
 From NeRF [[Mildenhall et al. 2020]](https://www.matthewtancik.com/nerf). Works better than OneBlob encoding if the dynamic range of the encoded dimension is high. However, suffers from stripe artifacts.
 
-The number of encoded dimensions is twice the specified number of frequencies for each input dimension.
+The number of encoded dimensions is twice the specified number of frequencies for each input dimension. E.g. with `n_frequencies == 4`, an input dimension `x` becomes `sin(πx), cos(πx), sin(2πx), cos(2πx), sin(4πx), cos(4πx), sin(8πx), cos(8πx)`.
+
+Note that many NeRF implementations (including the official ones) omit the factor of `π` from eq. (4) of the paper. This makes little difference in practice as coordinate normalization usually differs by similar amounts. Due to the logarithmic scaling of this encoding, this means that one or two fewer or additional frequency bands might be required to match results across implementations.
 
 ```json5
 {
