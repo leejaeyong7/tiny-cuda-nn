@@ -226,7 +226,7 @@ if __name__ == '__main__':
 
 if __name__ == "__main__":
 	# test_()
-	test_train()
+	# test_train()
 	# grad_check()
-	# vis_graph()
+	vis_graph()
 	# check_throw()

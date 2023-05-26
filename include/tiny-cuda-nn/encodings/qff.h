@@ -706,9 +706,6 @@ public:
 			return;
 		}
 
-        if (param_gradients_mode == EGradientMode::Overwrite) {
-            CUDA_CHECK_THROW(cudaMemsetAsync(dL_dinput->data(), 0, num_elements * 3 * sizeof(float), stream));
-        }
 		kernel_qff_backward_input<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			m_n_frequencies, // F
@@ -860,7 +857,8 @@ public:
 
 private:
 	struct ForwardContext : public Context {
-		GPUMatrix<float> dy_dx;
+		GPUMatrix<float, RM> positions;
+		GPUMatrix<float, RM> dy_dx;
 	};
 
 	uint32_t m_n_frequencies;
