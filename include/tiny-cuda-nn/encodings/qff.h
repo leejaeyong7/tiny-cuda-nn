@@ -126,7 +126,7 @@ __device__ void grad_nlinear_interp(
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_point_helper(
-    float * grad_points, 
+    MatrixView<float> grad_points, 
 	const T * __restrict__ features, 
     const uint32_t R, 
     const float sc[N_POS_DIMS], 
@@ -189,7 +189,9 @@ __device__ void grad_point_helper(
 		float go = (float)grad_output(out_offset + c, b);
         // TCNN_PRAGMA_UNROLL
         for (int k = 0; k < N_POS_DIMS; k++){
-            atomicAdd(grad_points + k, go * results[k*C + c]);
+            // atomicAdd(grad_points + k, go * results[k*C + c]);
+            atomicAdd((float*)&grad_points(k, b), go * results[k*C + c]);
+			// atomicAdd((float*)&dL_dx(grad_dim, i), grad_out);
         }
     }
 }
@@ -463,7 +465,7 @@ __global__ void kernel_qff_backward_input(
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
-    float* __restrict__ grad_points,       // Bx3
+    MatrixView<float> grad_points,       // Bx3
 	T * __restrict__ features       // Fx2xRsxC
 ) {
     const uint32_t b = blockIdx.x * blockDim.x + threadIdx.x;
@@ -475,7 +477,7 @@ __global__ void kernel_qff_backward_input(
     const float freq = powf(2.0, freq_base);
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
-	grad_points += b*N_POS_DIMS;
+	// grad_points += b*N_POS_DIMS;
     features += f*2*C*Rs + s*C*Rs;
 
 	float sc[N_POS_DIMS];
@@ -625,13 +627,14 @@ public:
 	) override {
 		auto forward = std::make_unique<ForwardContext>();
 
-		if (!output || padded_output_width() == 0) {
+		if ((!output && !prepare_input_gradients) || padded_output_width() == 0) {
 			return forward;
 		}
 
-		if (prepare_input_gradients) {
-			forward->dy_dx = GPUMatrix<float>{N_POS_DIMS * m_n_frequencies * 2, input.n(), stream};
-		}
+		// if (prepare_input_gradients) {
+		// 	forward->dy_dx = GPUMatrix<float>{N_POS_DIMS * m_n_frequencies * C, input.n(), stream};
+		// }
+
 		static constexpr uint32_t N_THREADS = 512;
 		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
 		kernel_qff_forward<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
@@ -715,7 +718,7 @@ public:
 			m_n_to_pad, // P
 			dL_doutput.view(),
 			input.view(),
-			dL_dinput->data(),
+			dL_dinput->view(),
 			use_inference_params ? this->inference_params() : this->params()
 		);
 	}
@@ -857,8 +860,7 @@ public:
 
 private:
 	struct ForwardContext : public Context {
-		GPUMatrix<float, RM> positions;
-		GPUMatrix<float, RM> dy_dx;
+		// GPUMatrix<float, RM> dy_dx;
 	};
 
 	uint32_t m_n_frequencies;
