@@ -20,7 +20,6 @@ static inline  __device__ uint32_t powu(const uint32_t base, const uint32_t exp)
     return val;
 }
 
-
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void nlinear_interp(
     const T * __restrict__ features, 
@@ -189,9 +188,7 @@ __device__ void grad_point_helper(
 		float go = (float)grad_output(out_offset + c, b);
         // TCNN_PRAGMA_UNROLL
         for (int k = 0; k < N_POS_DIMS; k++){
-            // atomicAdd(grad_points + k, go * results[k*C + c]);
-            atomicAdd((float*)&grad_points(k, b), go * results[k*C + c]);
-			// atomicAdd((float*)&dL_dx(grad_dim, i), grad_out);
+            atomicAdd((float*)&grad_points(k, b), go * results[k * C + c]);
         }
     }
 }
@@ -610,12 +607,11 @@ public:
 	  m_n_frequencies{n_frequencies} 
 	{
 		m_n_output_dims = m_n_frequencies * 2 * C;
-		m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
-		// if (N_POS_DIMS == 2){
-		// 	m_n_params = n_quants * n_quants * 2 * m_n_frequencies * C;
-		// } else{
-		// 	m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
-		// }
+		if (N_POS_DIMS == 2){
+			m_n_params = n_quants * n_quants * 2 * m_n_frequencies * C;
+		} else{
+			m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
+		}
 	}
 
 	std::unique_ptr<Context> forward_impl(
@@ -669,45 +665,53 @@ public:
 
 		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
 
-        // If not, accumulate in a temporary buffer and cast later.
-		grad_t * grad_array;
-		GPUMemoryArena::Allocation grad_array_tmp;
-		if (!std::is_same<grad_t, T>::value) {
-			grad_array_tmp = allocate_workspace(stream, m_n_params * sizeof(grad_t));
-			grad_array = (grad_t*)grad_array_tmp.data();
-		} else {
-			grad_array = (grad_t*)this->gradients();
-		}
-
-
-        if (param_gradients_mode == EGradientMode::Overwrite) {
-            CUDA_CHECK_THROW(cudaMemsetAsync(grad_array, 0, m_n_params * sizeof(grad_t), stream));
-        }
-
-
 		static constexpr uint32_t N_THREADS = 512;
 		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
-		kernel_qff_backward_features<grad_t, T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
-			input.n(), // B
-			m_n_frequencies, // F
-			m_n_quants, // Q
-			m_log2_min_freq, // I
-			m_log2_max_freq, // X
-			m_n_to_pad, // P
-			dL_doutput.view(),
-			input.view(),
-            grad_array 
-        );
 
-		if (!std::is_same<grad_t, T>::value) {
-			parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=grad_array] __device__ (size_t i) {
-				grad[i] = (T)grad_tmp[i];
-			});
+
+        // If not, accumulate in a temporary buffer and cast later.
+		if(param_gradients_mode != EGradientMode::Ignore){
+			grad_t * grad_array;
+			GPUMemoryArena::Allocation grad_array_tmp;
+			if (!std::is_same<grad_t, T>::value) {
+				grad_array_tmp = allocate_workspace(stream, m_n_params * sizeof(grad_t));
+				grad_array = (grad_t*)grad_array_tmp.data();
+			} else {
+				grad_array = (grad_t*)this->gradients();
+			}
+
+
+			if (param_gradients_mode == EGradientMode::Overwrite) {
+				CUDA_CHECK_THROW(cudaMemsetAsync(grad_array, 0, m_n_params * sizeof(grad_t), stream));
+			}
+
+
+			kernel_qff_backward_features<grad_t, T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+				input.n(), // B
+				m_n_frequencies, // F
+				m_n_quants, // Q
+				m_log2_min_freq, // I
+				m_log2_max_freq, // X
+				m_n_to_pad, // P
+				dL_doutput.view(),
+				input.view(),
+				grad_array 
+			);
+
+			if (!std::is_same<grad_t, T>::value) {
+				parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=grad_array] __device__ (size_t i) {
+					grad[i] = (T)grad_tmp[i];
+				});
+			}
 		}
-
 		if (!dL_dinput) {
 			return;
 		}
+		parallel_for_gpu(stream, input.n(), [ddl=dL_dinput->view()] __device__ (size_t j) {
+			for(uint32_t i = 0; i < N_POS_DIMS; i++){
+				ddl(i, j) = 0;
+			}
+		});
 
 		kernel_qff_backward_input<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
 			input.n(), // B
@@ -721,6 +725,8 @@ public:
 			dL_dinput->view(),
 			use_inference_params ? this->inference_params() : this->params()
 		);
+		return;
+
 	}
 
 
@@ -898,7 +904,7 @@ QFF<T>* create_qff_encoding_1(const json& encoding) {
 template <typename T>
 QFF<T>* create_qff_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
-		// case 2: return create_qff_encoding_1<T, 2>(encoding);
+		case 2: return create_qff_encoding_1<T, 2>(encoding);
 		case 3: return create_qff_encoding_1<T, 3>(encoding);
 		default: throw std::runtime_error{"QFF: number of input dims must be 2,3 or 4."};
 	}
