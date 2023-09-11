@@ -35,7 +35,8 @@
 #include <tiny-cuda-nn/encodings/grid.h>
 #include <tiny-cuda-nn/encodings/identity.h>
 #include <tiny-cuda-nn/encodings/oneblob.h>
-#include <tiny-cuda-nn/encodings/qff.h>
+#include <tiny-cuda-nn/encodings/qff_3.h>
+#include <tiny-cuda-nn/encodings/qff_1.h>
 #include <tiny-cuda-nn/encodings/spherical_harmonics.h>
 #include <tiny-cuda-nn/encodings/triangle_wave.h>
 
@@ -85,6 +86,9 @@ std::string to_string(ReductionType reduction_type) {
 
 template <typename T>
 void register_builtin_encodings() {
+	register_encoding<T>("QFF1", [](uint32_t n_dims_to_encode, const json& encoding) {
+		return create_qff_1_encoding<T>(n_dims_to_encode, encoding);
+	});
 	register_encoding<T>("Composite", [](uint32_t n_dims_to_encode, const json& encoding) {
 		return new CompositeEncoding<T>{encoding, n_dims_to_encode};
 	});
@@ -145,8 +149,8 @@ void register_builtin_encodings() {
 	register_encoding<T>("OneBlobFrequency", nrc_factory);
 	register_encoding<T>("NRC", nrc_factory);
 
-	register_encoding<T>("QFF", [](uint32_t n_dims_to_encode, const json& encoding) {
-		return create_qff_encoding<T>(n_dims_to_encode, encoding);
+	register_encoding<T>("QFF3", [](uint32_t n_dims_to_encode, const json& encoding) {
+		return create_qff_3_encoding<T>(n_dims_to_encode, encoding);
 	});
 }
 
