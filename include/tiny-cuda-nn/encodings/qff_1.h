@@ -47,7 +47,6 @@ __device__ void linear_interp(
 
 			TCNN_PRAGMA_UNROLL
 			for(uint32_t i = 0; i < D; i++){
-				// 3CQR
 				float f0 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (p0[i] * R) + r);
 				float f1 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (p1[i] * R) + r);
 				f *= (w[i] * f1) + ((1 - w[i]) * f0);
@@ -166,7 +165,7 @@ __global__ void kernel_qff_1_forward(
 	if (b>= B) return;
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
 
 	// skip freq / sc
@@ -198,7 +197,7 @@ __global__ void kernel_qff_1_backward(
 	if (b>= B) return;
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
 
 	// skip freq / sc
@@ -330,7 +329,7 @@ public:
 	}
 	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, powf(-1e-4f, D) * scale, powf(1e-4f, D) * scale);
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.05f * scale, 0.05f * scale);
 	}
 
 	std::string otype() const override {
