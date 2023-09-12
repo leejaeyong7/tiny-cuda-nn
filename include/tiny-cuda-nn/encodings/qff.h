@@ -16,12 +16,6 @@ struct ForwardContext : public Context {
 	GPUMatrix<float, RM> dy_dx;
 };
 
-template <typename T>
-class QFFBase : public Encoding<T> {
-protected:
-	virtual uint32_t n_pos_dims() const = 0;
-	virtual uint32_t n_features() const = 0;
-};
 
 /**
  * @brief QFF1 encoding for ND inputs.
@@ -31,7 +25,7 @@ protected:
  * R: number of correlations per level (1, 2, 4 or 8) (Rank)
  */
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
-class QFF : public QFFBase<T> {
+class QFF : public Encoding<T> {
 public:
 	QFF(uint32_t log2_min_freq,
 		uint32_t log2_max_freq,
@@ -75,10 +69,10 @@ public:
 		return m_n_params;
 	}
 
-	uint32_t n_pos_dims() const override{
+	uint32_t n_pos_dims() const {
 		return D;
 	}
-	uint32_t n_features() const override{
+	uint32_t n_features() const {
 		return C;
 	}
 
@@ -104,7 +98,7 @@ public:
 			{"log2_max_freq", m_log2_max_freq},
 			{"n_quants", m_n_quants},
 			{"n_features_per_level", C},
-			{"n_corrs_per_feature", R}
+			{"rank", R}
 		};
 	}
 

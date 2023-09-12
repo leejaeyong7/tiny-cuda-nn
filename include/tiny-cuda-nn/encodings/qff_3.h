@@ -694,7 +694,7 @@ public:
 
 
 template <typename T, uint32_t D>
-QFFBase<T>* create_qff_3_encoding_by_feats(const json& encoding) {
+Encoding<T>* create_qff_3_encoding_by_feats(const json& encoding) {
 
 #define TCNN_QFF_PARAMS \
 	encoding.value("log2_min_freq", 0u), \
@@ -704,17 +704,17 @@ QFFBase<T>* create_qff_3_encoding_by_feats(const json& encoding) {
 
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		// case 1: return new QFF3<T, D, 1, 1>{ TCNN_QFF_PARAMS };
-		// case 2: return new QFF3<T, D, 2, 1>{ TCNN_QFF_PARAMS };
-		// case 4: return new QFF3<T, D, 4, 1>{ TCNN_QFF_PARAMS };
-		case 8: return new QFF3<T, D, 8>{ TCNN_QFF_PARAMS };
+		// case 1: return new QFF3<T, D, 1>{ TCNN_QFF_PARAMS };
+		// case 2: return new QFF3<T, D, 2>{ TCNN_QFF_PARAMS };
+		case 4: return new QFF3<T, D, 4>{ TCNN_QFF_PARAMS };
+		// case 8: return new QFF3<T, D, 8>{ TCNN_QFF_PARAMS };
 		default: throw std::runtime_error{"QFF: number of features must be 1, 2, 4 or 8"};
 	}
 #undef TCNN_QFF_PARAMS
 }
 
 template <typename T>
-QFFBase<T>* create_qff_3_encoding(uint32_t n_dims_to_encode, const json& encoding) {
+Encoding<T>* create_qff_3_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
 		// case 2: return create_qff_3_encoding_by_feats<T, 2>(encoding);
 		case 3: return create_qff_3_encoding_by_feats<T, 3>(encoding);

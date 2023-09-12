@@ -23,8 +23,8 @@ __device__ void nlinear_interp(
 	const uint32_t out_offset
 ) {
 	float w[D];
-	float p0[D];
-	float p1[D];
+	uint32_t p0[D];
+	uint32_t p1[D];
 	uint32_t o[D];
 
 	TCNN_PRAGMA_UNROLL
@@ -32,7 +32,7 @@ __device__ void nlinear_interp(
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
 		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
 		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
-		w[i] = p - p0[i];
+		w[i] = p - (float)p0[i];
 		o[i] = powu(R, i);
 	}
 
@@ -70,8 +70,8 @@ __device__ void grad_nlinear_interp(
 	const uint32_t out_offset 
 ){
 	float w[D];
-	float p0[D];
-	float p1[D];
+	uint32_t p0[D];
+	uint32_t p1[D];
 	uint32_t o[D];
 
 	TCNN_PRAGMA_UNROLL
@@ -79,7 +79,7 @@ __device__ void grad_nlinear_interp(
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
 		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
 		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
-		w[i] = p - p0[i];
+		w[i] = p - (float)p0[i];
 		o[i] = powu(R, i);
 	}
 

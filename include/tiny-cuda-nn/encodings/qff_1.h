@@ -25,28 +25,16 @@ __device__ void linear_interp(
 	const uint32_t out_offset
 ) {
 	float w[D];
-	float p0[D];
-	float p1[D];
+	uint32_t p0[D];
+	uint32_t p1[D];
 
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < D; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (Q -1);
 		p0[i] = min(max((uint32_t)floor(p), 0), Q - 1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
-		w[i] = p - p0[i];
+		p1[i] = max(min((uint32_t)ceil(p), Q-1), 0);
+		w[i] = p - (float)p0[i];
 	}
-	/**
-	 * Given sx, query for interpolated values at that location
-	 * 
-	 * for c in C
-	 *   var fs = 0
-	 *   for r in R
-	 *     var f = 1
-	 *     for i in D
-	 *       f *= sample(sx)
-	 *	   fs += f	
-	 *    results[c] = fs
-	 */
 
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t c = 0; c < C; c++){
@@ -56,11 +44,12 @@ __device__ void linear_interp(
 		TCNN_PRAGMA_UNROLL
 		for(uint32_t r = 0; r < R; r++){
 			float f = 1;
+
 			TCNN_PRAGMA_UNROLL
 			for(uint32_t i = 0; i < D; i++){
 				// 3CQR
-				float f0 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (uint32_t)(p0[i] * R) + r);
-				float f1 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (uint32_t)(p1[i] * R) + r);
+				float f0 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (p0[i] * R) + r);
+				float f1 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (p1[i] * R) + r);
 				f *= (w[i] * f1) + ((1 - w[i]) * f0);
 			}
 			fs += f;
@@ -81,15 +70,15 @@ __device__ void grad_linear_interp(
 	const uint32_t out_offset
 ) {
 	float w[D];
-	float p0[D];
-	float p1[D];
+	uint32_t p0[D];
+	uint32_t p1[D];
 
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < D; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (Q -1);
 		p0[i] = min(max((uint32_t)floor(p), 0), Q - 1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
-		w[i] = p - p0[i];
+		p1[i] = max(min((uint32_t)ceil(p), Q-1), 0);
+		w[i] = p - (float)p0[i];
 	}
 	/**
 	 * Given sx, query for interpolated values at that location
@@ -113,20 +102,24 @@ __device__ void grad_linear_interp(
 
 		TCNN_PRAGMA_UNROLL
 		for(int r = 0; r < R; r++){
+
+			TCNN_PRAGMA_UNROLL
 			for(int i = 0; i < D; i++){
 				grad_cache[r * D + i] = 1;
 			}
+
 			TCNN_PRAGMA_UNROLL
 			for(int i = 0; i < D; i++){
 				// 3CQR
-				float f0 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (uint32_t)(p0[i] * R) + r);
-				float f1 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (uint32_t)(p1[i] * R) + r);
+				float f0 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (p0[i] * R) + r);
+				float f1 = (float)*(features + (i * C * Q * R) + (c * Q * R) + (p1[i] * R) + r);
 				float fa = (w[i] * f1) + ((1 - w[i]) * f0);
-				for(int j = 0; j < D; i++){
-					grad_cache[r*D + i] *= (i == j) ? 1 : fa;
+				for(int j = 0; j < D; j++){
+					grad_cache[r * D + j] *= (i == j) ? 1 : fa;
 				}
 			}
 		}
+
 		TCNN_PRAGMA_UNROLL
 		for(int i = 0; i < D; i++){
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
@@ -134,25 +127,23 @@ __device__ void grad_linear_interp(
 				TCNN_PRAGMA_UNROLL
 				for(uint32_t r = 0; r < R; r+=2){
 					__half2 v0 = {
-						(__half)(go * grad_cache[r*D + i] * (1 - w[i])),
-						(__half)(go * grad_cache[(r + 1)*D + i] * (1 - w[i])),
+						(__half)(go * grad_cache[r*D + i] * (1 -w[i])),
+						(__half)(go * grad_cache[(r + 1)*D + i] * (1 -w[i])),
 					};
 					__half2 v1 = {
 						(__half)(go * grad_cache[r*D + i] * (w[i])),
 						(__half)(go * grad_cache[(r + 1)*D + i] * (w[i])),
 					};
 
-					atomicAdd((__half2*)(grad_features + (i * C*Q*R) + (c * Q*R) + (uint32_t)(p0[i] * R) + r), v0);
-					atomicAdd((__half2*)(grad_features + (i * C*Q*R) + (c * Q*R) + (uint32_t)(p1[i] * R) + r), v1);
+					atomicAdd((__half2*)(grad_features + (i * C*Q*R) + (c * Q*R) + (p0[i] * R) + r), v0);
+					atomicAdd((__half2*)(grad_features + (i * C*Q*R) + (c * Q*R) + (p1[i] * R) + r), v1);
 				}
 			} else
 #endif
-			{
-				TCNN_PRAGMA_UNROLL
-				for(int r = 0; r < R; r++){
-					atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (uint32_t)(p0[i] * R)+ r, go * grad_cache[r*D + i] * (1 - w[i]));
-					atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (uint32_t)(p1[i] * R)+ r, go * grad_cache[r*D + i] * w[i]);
-				}
+			TCNN_PRAGMA_UNROLL
+			for(int r = 0; r < R; r++){
+				atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (p0[i] * R)+ r, (GRAD_T)(go * grad_cache[r*D + i] * (1 -w[i])));
+				atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (p1[i] * R)+ r, (GRAD_T)(go * grad_cache[r*D + i] * w[i]));
 			}
 		}
 	}
@@ -179,7 +170,7 @@ __global__ void kernel_qff_1_forward(
     const float freq = powf(2.0, freq_base);
 
 	// skip freq / sc
-    features += f*2*D*Q*C*R + s*D*Q*C*R;
+    features += f*2*D*C*Q*R + s*D*C*Q*R;
 
 	float sc[D];
 
@@ -190,8 +181,6 @@ __global__ void kernel_qff_1_forward(
 	}
 	linear_interp<T, D, C, R>(features, Q, sc, outputs, b, f*2*C + s*C);
 }
-
-
 template <typename GRAD_T, typename T, uint32_t D, uint32_t C, uint32_t R>
 __global__ void kernel_qff_1_backward(
     const uint32_t B, // batch size
@@ -201,8 +190,8 @@ __global__ void kernel_qff_1_backward(
     const uint32_t max_log2_freq, 
     const uint32_t P, // padding (not used)
     MatrixView<const float> points,      // Bx3
-    T * __restrict__ grad_features,     // Fx2x3xCxQxR
-    const T * __restrict__ features,     // Fx2x3xCxQxR
+    T * __restrict__ features,     // Fx2x3xCxQxR
+    GRAD_T * __restrict__ grad_features,     // Fx2x3xCxQxR
     MatrixView<const T> grad_outputs      // BxF2C
 ) {
     const uint32_t b = blockIdx.x * blockDim.x + threadIdx.x;
@@ -213,8 +202,8 @@ __global__ void kernel_qff_1_backward(
     const float freq = powf(2.0, freq_base);
 
 	// skip freq / sc
-    grad_features += f*2*D*Q*C*R + s*D*Q*C*R;
-    features += f*2*D*Q*C*R + s*D*Q*C*R;
+    grad_features 	+= f*2*D*C*Q*R + s*D*C*Q*R;
+    features 		+= f*2*D*C*Q*R + s*D*C*Q*R;
 
 	float sc[D];
 
@@ -237,11 +226,12 @@ __global__ void kernel_qff_1_backward(
  */
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
 class QFF1 : public QFF<T, D, C, R> {
-#if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
-	using grad_t = std::conditional_t<C == 1, float, T>;
-#else
-	using grad_t = float;
-#endif
+using grad_t = float;
+// #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
+// 	using grad_t = std::conditional_t<C == 1, float, T>;
+// #else
+// 	using grad_t = float;
+// #endif
 public:
 	QFF1(uint32_t log2_min_freq,
 		 uint32_t log2_max_freq,
@@ -249,7 +239,7 @@ public:
 		 uint32_t n_frequencies)
 	: QFF<T, D, C, R>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
 	{
-		this->m_n_params = n_quants * 2 * this->m_n_frequencies * C * D * R;
+		this->m_n_params = this->m_n_frequencies * 2 * D * C * n_quants * R;
 	}
 
 	std::unique_ptr<Context> forward_impl(
@@ -297,8 +287,6 @@ public:
 			return;
 		}
 
-		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
-
 		static constexpr uint32_t N_THREADS = 512;
 		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
 
@@ -340,6 +328,10 @@ public:
 			}
 		}
 	}
+	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
+		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, powf(-1e-4f, D) * scale, powf(1e-4f, D) * scale);
+	}
 
 	std::string otype() const override {
 		return "QFF1";
@@ -358,15 +350,15 @@ Encoding<T>* create_qff_1_encoding_with_dim_and_feat(const json& encoding) {
 	encoding.value("n_quants", 64u), \
 	encoding.value("n_frequencies", 6u), \
 
-	const uint32_t n_corrs = encoding.value("n_corrs", 4u);
+	const uint32_t n_corrs = encoding.value("rank", 4u);
 
 	switch (n_corrs) {
-		// case 1: return QFF1<T, D, C, 1>(TCNN_QFF_PARAMS);
-		// case 2: return QFF1<T, D, C, 2>(TCNN_QFF_PARAMS);
-		// case 4: return QFF1<T, D, C, 4>(TCNN_QFF_PARAMS);
-		// case 16: return QFF1<T, D, C, 16>(TCNN_QFF_PARAMS);
+		// case 1: return new QFF1<T, D, C, 1>{ TCNN_QFF_PARAMS };
+		// case 2: return new QFF1<T, D, C, 2>{ TCNN_QFF_PARAMS };
+		case 4: return new QFF1<T, D, C, 4>{ TCNN_QFF_PARAMS };
 		case 8: return new QFF1<T, D, C, 8>{ TCNN_QFF_PARAMS };
-		default: throw std::runtime_error{"QFF1: number of corr must be 1, 2, 4, 8 or 16"};
+		case 16: return new QFF1<T, D, C, 16>{ TCNN_QFF_PARAMS };
+		default: throw std::runtime_error{"QFF1: rank must be 1, 2, 4, 8 or 16"};
 	}
 #undef TCNN_QFF_PARAMS 
 }
@@ -378,7 +370,7 @@ Encoding<T>* create_qff_1_encoding_with_dim(const json& encoding) {
 		// case 1: return create_qff_1_encoding_with_dim_and_feat<T, D, 1>(encoding);
 		// case 2: return create_qff_1_encoding_with_dim_and_feat<T, D, 2>(encoding);
 		case 4: return create_qff_1_encoding_with_dim_and_feat<T, D, 4>(encoding);
-		// case 8: return create_qff_1_encoding_with_dim_and_feat<T, D, 8>(encoding);
+		case 8: return create_qff_1_encoding_with_dim_and_feat<T, D, 8>(encoding);
 		default: throw std::runtime_error{"QFF1: number of features must be 1, 2, 4 or 8"};
 	}
 }
