@@ -225,12 +225,11 @@ __global__ void kernel_qff_1_backward(
  */
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
 class QFF1 : public QFF<T, D, C, R> {
-using grad_t = float;
-// #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
-// 	using grad_t = std::conditional_t<C == 1, float, T>;
-// #else
-// 	using grad_t = float;
-// #endif
+#if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
+	using grad_t = std::conditional_t<C == 1, float, T>;
+#else
+	using grad_t = float;
+#endif
 public:
 	QFF1(uint32_t log2_min_freq,
 		 uint32_t log2_max_freq,
