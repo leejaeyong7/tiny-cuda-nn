@@ -295,7 +295,7 @@ __global__ void kernel_qff_3_forward(
 	if (b>= B) return;
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
     const uint32_t Rs = powu(R, N_POS_DIMS);
     features += f*2*Rs*C + s*Rs*C;
@@ -328,7 +328,7 @@ __global__ void kernel_qff_3_backward_features(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
@@ -362,7 +362,7 @@ __global__ void kernel_qff_3_backward_input(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
@@ -405,7 +405,7 @@ __global__ void kernel_qff_3_backward_input_backward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
@@ -448,7 +448,7 @@ __global__ void kernel_qff_3_backward_input_backward_input(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
     const float freq = powf(2.0, freq_base);
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
