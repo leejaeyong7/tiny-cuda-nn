@@ -122,7 +122,7 @@ __device__ void grad_linear_interp(
 		TCNN_PRAGMA_UNROLL
 		for(int i = 0; i < D; i++){
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
-			if (C > 1 && std::is_same<GRAD_T, __half>::value) {
+			if (R > 1 && std::is_same<GRAD_T, __half>::value) {
 				TCNN_PRAGMA_UNROLL
 				for(uint32_t r = 0; r < R; r+=2){
 					__half2 v0 = {
@@ -141,8 +141,8 @@ __device__ void grad_linear_interp(
 #endif
 			TCNN_PRAGMA_UNROLL
 			for(int r = 0; r < R; r++){
-				atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (p0[i] * R)+ r, (GRAD_T)(go * grad_cache[r*D + i] * (1 -w[i])));
-				atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (p1[i] * R)+ r, (GRAD_T)(go * grad_cache[r*D + i] * w[i]));
+				atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (p0[i] * R) + r, (GRAD_T)(go * grad_cache[r*D + i] * (1 -w[i])));
+				atomicAdd(grad_features + (i * C*Q*R) + (c * Q*R) + (p1[i] * R) + r, (GRAD_T)(go * grad_cache[r*D + i] * w[i]));
 			}
 		}
 	}
@@ -226,7 +226,7 @@ __global__ void kernel_qff_1_backward(
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
 class QFF1 : public QFF<T, D, C, R> {
 #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
-	using grad_t = std::conditional_t<C == 1, float, T>;
+	using grad_t = std::conditional_t<R == 1, float, T>;
 #else
 	using grad_t = float;
 #endif
@@ -328,7 +328,7 @@ public:
 	}
 	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.05f * scale, 0.05f * scale);
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.2f * scale, 0.2f * scale);
 	}
 
 	std::string otype() const override {
@@ -352,7 +352,7 @@ Encoding<T>* create_qff_1_encoding_with_dim_and_feat(const json& encoding) {
 
 	switch (n_corrs) {
 		// case 1: return new QFF1<T, D, C, 1>{ TCNN_QFF_PARAMS };
-		// case 2: return new QFF1<T, D, C, 2>{ TCNN_QFF_PARAMS };
+		case 2: return new QFF1<T, D, C, 2>{ TCNN_QFF_PARAMS };
 		case 4: return new QFF1<T, D, C, 4>{ TCNN_QFF_PARAMS };
 		case 8: return new QFF1<T, D, C, 8>{ TCNN_QFF_PARAMS };
 		case 16: return new QFF1<T, D, C, 16>{ TCNN_QFF_PARAMS };
@@ -366,7 +366,7 @@ Encoding<T>* create_qff_1_encoding_with_dim(const json& encoding) {
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
 		// case 1: return create_qff_1_encoding_with_dim_and_feat<T, D, 1>(encoding);
-		// case 2: return create_qff_1_encoding_with_dim_and_feat<T, D, 2>(encoding);
+		case 2: return create_qff_1_encoding_with_dim_and_feat<T, D, 2>(encoding);
 		case 4: return create_qff_1_encoding_with_dim_and_feat<T, D, 4>(encoding);
 		case 8: return create_qff_1_encoding_with_dim_and_feat<T, D, 8>(encoding);
 		default: throw std::runtime_error{"QFF1: number of features must be 1, 2, 4 or 8"};
