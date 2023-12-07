@@ -218,7 +218,7 @@ __global__ void kernel_qff_2_backward(
 
 	// skip freq / sc
     grad_features 	+= f*2*D*C*Q*Q*R + s*D*C*Q*Q*R;
-    features 		+= f*1*D*C*Q*Q*R + s*D*C*Q*Q*R;
+    features 		+= f*2*D*C*Q*Q*R + s*D*C*Q*Q*R;
 
 	float sc[D];
 
