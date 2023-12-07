@@ -43,7 +43,7 @@ __device__ void bilinear_interp(
 
 		TCNN_PRAGMA_UNROLL
 		for(uint32_t r = 0; r < R; r++){
-			float f = 1;
+			float f = 0;
 
 			// bilinear interpolation, so we want to interpolate between 4 points
 			TCNN_PRAGMA_UNROLL
@@ -344,7 +344,7 @@ public:
 	}
 	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.2f * scale, 0.2f * scale);
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
 	}
 
 	std::string otype() const override {
