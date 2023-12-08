@@ -18,7 +18,7 @@ TCNN_NAMESPACE_BEGIN
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
 __device__ void linear_interp(
     const T * __restrict__ features, // Fx2x3xCxQxR, but we only have to care about last 4 : 3CQR
-    const uint32_t Q, 
+    const uint32_t Q,
 	const float sc[D],
 	MatrixView<T> outputs, // BxF2C
 	const uint32_t b,
@@ -62,7 +62,7 @@ template <typename GRAD_T, typename T, uint32_t D, uint32_t C, uint32_t R>
 __device__ void grad_linear_interp(
     GRAD_T * __restrict__ grad_features, // Fx2x3xCxQxR, but we only have to care about last 4 : 3CQR
     const T * __restrict__ features, // Fx2x3xCxQxR, but we only have to care about last 4 : 3CQR
-    const uint32_t Q, 
+    const uint32_t Q,
 	const float sc[D],
 	MatrixView<const T> grad_outputs, // BxF2C
 	const uint32_t b,
@@ -81,14 +81,14 @@ __device__ void grad_linear_interp(
 	}
 	/**
 	 * Given sx, query for interpolated values at that location
-	 * 
+	 *
 	 * for c in C
 	 *   var fs = 0
 	 *   for r in R
 	 *     var f = 1
 	 *     for i in D
 	 *       f *= sample(sx)
-	 *	   fs += f	
+	 *	   fs += f
 	 *    results[c] = fs
 	 */
 
@@ -154,8 +154,8 @@ __global__ void kernel_qff_1_forward(
     const uint32_t B, // batch size
 	const uint32_t F, // freq size
     const uint32_t Q, // quantization size
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const uint32_t min_log2_freq,
+    const uint32_t max_log2_freq,
     const uint32_t P, // padding (not used)
     MatrixView<const float> points,      // Bx3
     const T * __restrict__ features,     // Fx2x3xCxQxR
@@ -185,8 +185,8 @@ __global__ void kernel_qff_1_backward(
     const uint32_t B, // batch size
 	const uint32_t F, // freq size
     const uint32_t Q, // quantization size
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const uint32_t min_log2_freq,
+    const uint32_t max_log2_freq,
     const uint32_t P, // padding (not used)
     MatrixView<const float> points,      // Bx3
     T * __restrict__ features,     // Fx2x3xCxQxR
@@ -328,7 +328,7 @@ public:
 	}
 	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.2f * scale, 0.2f * scale);
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.04f * scale, 0.04f * scale);
 	}
 
 	std::string otype() const override {
@@ -358,7 +358,7 @@ Encoding<T>* create_qff_1_encoding_with_dim_and_feat(const json& encoding) {
 		case 16: return new QFF1<T, D, C, 16>{ TCNN_QFF_PARAMS };
 		default: throw std::runtime_error{"QFF1: rank must be 1, 2, 4, 8 or 16"};
 	}
-#undef TCNN_QFF_PARAMS 
+#undef TCNN_QFF_PARAMS
 }
 
 template <typename T, uint32_t D>
