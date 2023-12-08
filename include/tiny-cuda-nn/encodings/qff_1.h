@@ -328,7 +328,7 @@ public:
 	}
 	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.04f * scale, 0.04f * scale);
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.7f * scale, 0.7f * scale);
 	}
 
 	std::string otype() const override {
