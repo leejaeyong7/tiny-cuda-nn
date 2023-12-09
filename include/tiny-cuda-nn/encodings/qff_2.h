@@ -16,7 +16,7 @@
 TCNN_NAMESPACE_BEGIN
 
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
-__device__ void bilinear_interp(
+__device__ void trilinear_interp(
     const T * __restrict__ features, // Fx2x3xCxQxQxR, but we only have to care about last 4 : 3CQQR
     const uint32_t Q,
 	const float sc[D],
@@ -43,27 +43,39 @@ __device__ void bilinear_interp(
 
 		TCNN_PRAGMA_UNROLL
 		for(uint32_t r = 0; r < R; r++){
-			float f = 0;
+			float fx_y0z0 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p0[0] * R)+r);
+			float fx_y0z1 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p0[0] * R)+r);
+			float fx_y1z0 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p1[0] * R)+r);
+			float fx_y1z1 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p1[0] * R)+r);
 
-			// bilinear interpolation, so we want to interpolate between 4 points
-			TCNN_PRAGMA_UNROLL
-			for(uint32_t i = 0; i < D; i++){
-				uint32_t jj = (i + 1) % D;
-				uint32_t kk = (i + 2) % D;
-				uint32_t j = min(jj, kk);
-				uint32_t k = max(jj, kk);
+			float fy_x0z0 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p0[1] * R)+r);
+			float fy_x0z1 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p0[1] * R)+r);
+			float fy_x1z0 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p1[1] * R)+r);
+			float fy_x1z1 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p1[1] * R)+r);
 
-				float f00 = (float)*(features + (i * C * Q * Q* R) + (c * Q * Q* R) + (p0[k] * Q* R) + (p0[j] * R)+r);
-				float f01 = (float)*(features + (i * C * Q * Q* R) + (c * Q * Q* R) + (p0[k] * Q* R) + (p1[j] * R)+r);
-				float f10 = (float)*(features + (i * C * Q * Q* R) + (c * Q * Q* R) + (p1[k] * Q* R) + (p0[j] * R)+r);
-				float f11 = (float)*(features + (i * C * Q * Q* R) + (c * Q * Q* R) + (p1[k] * Q* R) + (p1[j] * R)+r);
-				float w00 = (1 - w[j]) * (1 - w[k]);
-				float w01 = w[j] * (1 - w[k]);
-				float w10 = (1 - w[j]) * w[k];
-				float w11 = w[j] * w[k];
-				f += (w00 * f00) + (w01 * f01) + (w10 * f10) + (w11 * f11);
-			}
-			fs += f;
+			float fz_x0y0 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[2] * R)+r);
+			float fz_x0y1 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[2] * R)+r);
+			float fz_x1y0 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[2] * R)+r);
+			float fz_x1y1 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[2] * R)+r);
+
+			float f000 = fx_y0z0 * fy_x0z0 * fz_x0y0;
+			float f001 = fx_y0z0 * fy_x1z0 * fz_x1y0;
+			float f010 = fx_y1z0 * fy_x0z0 * fz_x0y1;
+			float f011 = fx_y1z0 * fy_x1z0 * fz_x1y1;
+			float f100 = fx_y0z1 * fy_x0z1 * fz_x0y0;
+			float f101 = fx_y0z1 * fy_x1z1 * fz_x1y0;
+			float f110 = fx_y1z1 * fy_x0z1 * fz_x0y1;
+			float f111 = fx_y1z1 * fy_x1z1 * fz_x1y1;
+			float w000 = (1 - w[0]) * (1 - w[1]) * (1 - w[2]);
+			float w001 = w[0] * (1 - w[1]) * (1 - w[2]);
+			float w010 = (1 - w[0]) * w[1] * (1 - w[2]);
+			float w011 = w[0] * w[1] * (1 - w[2]);
+			float w100 = (1 - w[0]) * (1 - w[1]) * w[2];
+			float w101 = w[0] * (1 - w[1]) * w[2];
+			float w110 = (1 - w[0]) * w[1] * w[2];
+			float w111 = w[0] * w[1] * w[2];
+
+			fs += (w000 * f000) + (w001 * f001) + (w010 * f010) + (w011 * f011) + (w100 * f100) + (w101 * f101) + (w110 * f110) + (w111 * f111);
 		}
 		outputs(out_offset + c, b) = (T)fs;
 	}
@@ -71,7 +83,7 @@ __device__ void bilinear_interp(
 
 
 template <typename GRAD_T, typename T, uint32_t D, uint32_t C, uint32_t R>
-__device__ void grad_bilinear_interp(
+__device__ void grad_trilinear_interp(
     GRAD_T * __restrict__ grad_features, // Fx2x3xCxQxR, but we only have to care about last 4 : 3CQR
     const T * __restrict__ features, // Fx2x3xCxQxR, but we only have to care about last 4 : 3CQR
     const uint32_t Q,
@@ -111,18 +123,41 @@ __device__ void grad_bilinear_interp(
 
 		TCNN_PRAGMA_UNROLL
 		for(int i = 0; i < D; i++){
-			uint32_t jj = (i + 1) % D;
-			uint32_t kk = (i + 2) % D;
-			uint32_t j = min(jj, kk);
-			uint32_t k = max(jj, kk);
-			uint32_t o00 = (i * C * Q * Q* R) + (c * Q * Q* R) + (p0[k] * Q* R) + (p0[j] * R);
-			uint32_t o01 = (i * C * Q * Q* R) + (c * Q * Q* R) + (p0[k] * Q* R) + (p1[j] * R);
-			uint32_t o10 = (i * C * Q * Q* R) + (c * Q * Q* R) + (p1[k] * Q* R) + (p0[j] * R);
-			uint32_t o11 = (i * C * Q * Q* R) + (c * Q * Q* R) + (p1[k] * Q* R) + (p1[j] * R);
-			float w00 = (1 - w[j]) * (1 - w[k]);
-			float w01 = w[j] * (1 - w[k]);
-			float w10 = (1 - w[j]) * w[k];
-			float w11 = w[j] * w[k];
+			uint32_t ox_y0z0 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p0[0] * R);
+			uint32_t ox_y0z1 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p0[0] * R);
+			uint32_t ox_y1z0 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p1[0] * R);
+			uint32_t ox_y1z1 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p1[0] * R);
+			uint32_t oy_x0z0 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p0[1] * R);
+			uint32_t oy_x0z1 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p0[1] * R);
+			uint32_t oy_x1z0 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p1[1] * R);
+			uint32_t oy_x1z1 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p1[1] * R);
+			uint32_t oz_x0y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[2] * R);
+			uint32_t oz_x0y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[2] * R);
+			uint32_t oz_x1y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[2] * R);
+			uint32_t oz_x1y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[2] * R);
+			float fx_y0z0 = (float)*(features + ox_y0z0 + r);
+			float fx_y0z1 = (float)*(features + ox_y0z1 + r);
+			float fx_y1z0 = (float)*(features + ox_y1z0 + r);
+			float fx_y1z1 = (float)*(features + ox_y1z1 + r);
+
+			float fy_x0z0 = (float)*(features + oy_x0z0 + r);
+			float fy_x0z1 = (float)*(features + oy_x0z1 + r);
+			float fy_x1z0 = (float)*(features + oy_x1z0 + r);
+			float fy_x1z1 = (float)*(features + oy_x1z1 + r);
+
+			float fz_x0y0 = (float)*(features + oz_x0y0 + r);
+			float fz_x0y1 = (float)*(features + oz_x0y1 + r);
+			float fz_x1y0 = (float)*(features + oz_x1y0 + r);
+			float fz_x1y1 = (float)*(features + oz_x1y1 + r);
+
+			float w000 = (1 - w[0]) * (1 - w[1]) * (1 - w[2]);
+			float w001 = w[0] * (1 - w[1]) * (1 - w[2]);
+			float w010 = (1 - w[0]) * w[1] * (1 - w[2]);
+			float w011 = w[0] * w[1] * (1 - w[2]);
+			float w100 = (1 - w[0]) * (1 - w[1]) * w[2];
+			float w101 = w[0] * (1 - w[1]) * w[2];
+			float w110 = (1 - w[0]) * w[1] * w[2];
+			float w111 = w[0] * w[1] * w[2];
 
 // atomicAdd(__half2) is only supported with compute capability 60 and above
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
@@ -153,12 +188,19 @@ __device__ void grad_bilinear_interp(
 			} else
 #endif
 
+
+			// float f000 = fx_y0z0 * fy_x0z0 * fz_x0y0;
+			// float f001 = fx_y0z0 * fy_x1z0 * fz_x1y0;
+			// float f010 = fx_y1z0 * fy_x0z0 * fz_x0y1;
+			// float f011 = fx_y1z0 * fy_x1z0 * fz_x1y1;
+			// float f100 = fx_y0z1 * fy_x0z1 * fz_x0y0;
+			// float f101 = fx_y0z1 * fy_x1z1 * fz_x1y0;
+			// float f110 = fx_y1z1 * fy_x0z1 * fz_x0y1;
+			// float f111 = fx_y1z1 * fy_x1z1 * fz_x1y1;
+			// fs += (w000 * f000) + (w001 * f001) + (w010 * f010) + (w011 * f011) + (w100 * f100) + (w101 * f101) + (w110 * f110) + (w111 * f111);
 			TCNN_PRAGMA_UNROLL
 			for(int r = 0; r < R; r++){
-				atomicAdd(grad_features + o00 + r, (GRAD_T)(go * w00));
-				atomicAdd(grad_features + o01 + r, (GRAD_T)(go * w01));
-				atomicAdd(grad_features + o10 + r, (GRAD_T)(go * w10));
-				atomicAdd(grad_features + o11 + r, (GRAD_T)(go * w11));
+				atomicAdd(grad_features + ox_y0z0 + r, (GRAD_T)(go * w00));
 			}
 		}
 	}
@@ -194,7 +236,7 @@ __global__ void kernel_qff_2_forward(
 		float p = points(i, b);
 		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
 	}
-	bilinear_interp<T, D, C, R>(features, Q, sc, outputs, b, f*2*C + s*C);
+	trilinear_interp<T, D, C, R>(features, Q, sc, outputs, b, f*2*C + s*C);
 }
 template <typename GRAD_T, typename T, uint32_t D, uint32_t C, uint32_t R>
 __global__ void kernel_qff_2_backward(
@@ -227,7 +269,7 @@ __global__ void kernel_qff_2_backward(
 		float p = points(i, b);
 		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
 	}
-	grad_bilinear_interp<GRAD_T, T, D, C, R>(grad_features, features, Q, sc, grad_outputs, b, f*2*C + s*C);
+	grad_trilinear_interp<GRAD_T, T, D, C, R>(grad_features, features, Q, sc, grad_outputs, b, f*2*C + s*C);
 }
 
 /////////////////////
@@ -372,7 +414,7 @@ Encoding<T>* create_qff_2_encoding_with_dim_and_feat(const json& encoding) {
 		case 4: return new QFF2<T, D, C, 4>{ TCNN_QFF_PARAMS };
 		case 8: return new QFF2<T, D, C, 8>{ TCNN_QFF_PARAMS };
 		case 16: return new QFF2<T, D, C, 16>{ TCNN_QFF_PARAMS };
-		default: throw std::runtime_error{"QFF1: rank must be 1, 2, 4, 8 or 16"};
+		default: throw std::runtime_error{"QFF2: rank must be 1, 2, 4, 8 or 16"};
 	}
 #undef TCNN_QFF_PARAMS
 }
@@ -385,7 +427,7 @@ Encoding<T>* create_qff_2_encoding_with_dim(const json& encoding) {
 		case 2: return create_qff_2_encoding_with_dim_and_feat<T, D, 2>(encoding);
 		case 4: return create_qff_2_encoding_with_dim_and_feat<T, D, 4>(encoding);
 		case 8: return create_qff_2_encoding_with_dim_and_feat<T, D, 8>(encoding);
-		default: throw std::runtime_error{"QFF1: number of features must be 1, 2, 4 or 8"};
+		default: throw std::runtime_error{"QFF2: number of features must be 1, 2, 4 or 8"};
 	}
 }
 
@@ -394,7 +436,7 @@ Encoding<T>* create_qff_2_encoding(uint32_t n_dims_to_encode, const json& encodi
 	switch (n_dims_to_encode) {
 		// case 2: return create_qff_2_encoding_with_dim<T, 2>(encoding);
 		case 3: return create_qff_2_encoding_with_dim<T, 3>(encoding);
-		default: throw std::runtime_error{"QFF1: number of input dims must be 2 or 3"};
+		default: throw std::runtime_error{"QFF2: number of input dims must be 2 or 3"};
 	}
 }
 
