@@ -52,20 +52,20 @@ __device__ void trilinear_interp(
 
 		TCNN_PRAGMA_UNROLL
 		for(uint32_t r = 0; r < R; r++){
-			float fx_y0z0 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p0[0] * R)+r);
-			float fx_y0z1 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p0[0] * R)+r);
-			float fx_y1z0 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p1[0] * R)+r);
-			float fx_y1z1 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p1[0] * R)+r);
+			float fx_y0z0 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[1] * R)+r);
+			float fx_y0z1 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[1] * R)+r);
+			float fx_y1z0 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[1] * R)+r);
+			float fx_y1z1 = (float)*(features + (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[1] * R)+r);
 
-			float fy_x0z0 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p0[1] * R)+r);
-			float fy_x0z1 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p0[1] * R)+r);
-			float fy_x1z0 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p1[1] * R)+r);
-			float fy_x1z1 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p1[1] * R)+r);
+			float fy_x0z0 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[0] * R)+r);
+			float fy_x0z1 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[0] * R)+r);
+			float fy_x1z0 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[0] * R)+r);
+			float fy_x1z1 = (float)*(features + (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[0] * R)+r);
 
-			float fz_x0y0 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[2] * R)+r);
-			float fz_x0y1 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[2] * R)+r);
-			float fz_x1y0 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[2] * R)+r);
-			float fz_x1y1 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[2] * R)+r);
+			float fz_x0y0 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p0[0] * R)+r);
+			float fz_x0y1 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p0[0] * R)+r);
+			float fz_x1y0 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p1[0] * R)+r);
+			float fz_x1y1 = (float)*(features + (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p1[0] * R)+r);
 
 			float f000 = fx_y0z0 * fy_x0z0 * fz_x0y0;
 			float f001 = fx_y0z0 * fy_x1z0 * fz_x1y0;
@@ -131,18 +131,20 @@ __device__ void grad_trilinear_interp(
 
 		TCNN_PRAGMA_UNROLL
 		for(int i = 0; i < D; i++){
-			uint32_t ox_y0z0 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p0[0] * R);
-			uint32_t ox_y0z1 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p0[0] * R);
-			uint32_t ox_y1z0 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[0] * Q* R) + (p1[0] * R);
-			uint32_t ox_y1z1 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[0] * Q* R) + (p1[0] * R);
-			uint32_t oy_x0z0 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p0[1] * R);
-			uint32_t oy_x0z1 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p0[1] * R);
-			uint32_t oy_x1z0 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p1[1] * R);
-			uint32_t oy_x1z1 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p1[1] * R);
-			uint32_t oz_x0y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[2] * R);
-			uint32_t oz_x0y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[2] * R);
-			uint32_t oz_x1y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[2] * R);
-			uint32_t oz_x1y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[2] * R);
+			uint32_t ox_y0z0 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[1] * R);
+			uint32_t ox_y0z1 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[1] * R);
+			uint32_t ox_y1z0 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[1] * R);
+			uint32_t ox_y1z1 = (0 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[1] * R);
+
+			uint32_t oy_x0z0 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p0[0] * R);
+			uint32_t oy_x0z1 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[0] * R);
+			uint32_t oy_x1z0 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[0] * R);
+			uint32_t oy_x1z1 = (1 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[0] * R);
+
+			uint32_t oz_x0y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p0[0] * R);
+			uint32_t oz_x0y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p0[0] * R);
+			uint32_t oz_x1y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[1] * Q* R) + (p1[0] * R);
+			uint32_t oz_x1y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[1] * Q* R) + (p1[0] * R);
 
 
 // atomicAdd(__half2) is only supported with compute capability 60 and above
@@ -454,7 +456,7 @@ public:
 	}
 	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
 		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
+		generate_random_uniform<float>(rnd, this->n_params(), params_full_precision, -0.2f * scale, 0.2f * scale);
 	}
 
 	std::string otype() const override {
