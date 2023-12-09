@@ -35,6 +35,15 @@ __device__ void trilinear_interp(
 		p1[i] = max(min((uint32_t)ceil(p), Q-1), 0);
 		w[i] = p - (float)p0[i];
 	}
+	float w000 = (1 - w[0]) * (1 - w[1]) * (1 - w[2]);
+	float w001 = w[0] * (1 - w[1]) * (1 - w[2]);
+	float w010 = (1 - w[0]) * w[1] * (1 - w[2]);
+	float w011 = w[0] * w[1] * (1 - w[2]);
+	float w100 = (1 - w[0]) * (1 - w[1]) * w[2];
+	float w101 = w[0] * (1 - w[1]) * w[2];
+	float w110 = (1 - w[0]) * w[1] * w[2];
+	float w111 = w[0] * w[1] * w[2];
+
 
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t c = 0; c < C; c++){
@@ -66,15 +75,6 @@ __device__ void trilinear_interp(
 			float f101 = fx_y0z1 * fy_x1z1 * fz_x1y0;
 			float f110 = fx_y1z1 * fy_x0z1 * fz_x0y1;
 			float f111 = fx_y1z1 * fy_x1z1 * fz_x1y1;
-			float w000 = (1 - w[0]) * (1 - w[1]) * (1 - w[2]);
-			float w001 = w[0] * (1 - w[1]) * (1 - w[2]);
-			float w010 = (1 - w[0]) * w[1] * (1 - w[2]);
-			float w011 = w[0] * w[1] * (1 - w[2]);
-			float w100 = (1 - w[0]) * (1 - w[1]) * w[2];
-			float w101 = w[0] * (1 - w[1]) * w[2];
-			float w110 = (1 - w[0]) * w[1] * w[2];
-			float w111 = w[0] * w[1] * w[2];
-
 			fs += (w000 * f000) + (w001 * f001) + (w010 * f010) + (w011 * f011) + (w100 * f100) + (w101 * f101) + (w110 * f110) + (w111 * f111);
 		}
 		outputs(out_offset + c, b) = (T)fs;
@@ -103,6 +103,14 @@ __device__ void grad_trilinear_interp(
 		p1[i] = max(min((uint32_t)ceil(p), Q-1), 0);
 		w[i] = p - (float)p0[i];
 	}
+	float w000 = (1 - w[0]) * (1 - w[1]) * (1 - w[2]);
+	float w001 = w[0] * (1 - w[1]) * (1 - w[2]);
+	float w010 = (1 - w[0]) * w[1] * (1 - w[2]);
+	float w011 = w[0] * w[1] * (1 - w[2]);
+	float w100 = (1 - w[0]) * (1 - w[1]) * w[2];
+	float w101 = w[0] * (1 - w[1]) * w[2];
+	float w110 = (1 - w[0]) * w[1] * w[2];
+	float w111 = w[0] * w[1] * w[2];
 	/**
 	 * Given sx, query for interpolated values at that location
 	 *
@@ -135,72 +143,132 @@ __device__ void grad_trilinear_interp(
 			uint32_t oz_x0y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p0[2] * R);
 			uint32_t oz_x1y0 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p0[2] * Q* R) + (p1[2] * R);
 			uint32_t oz_x1y1 = (2 * C * Q * Q* R) + (c * Q * Q* R) + (p1[2] * Q* R) + (p1[2] * R);
-			float fx_y0z0 = (float)*(features + ox_y0z0 + r);
-			float fx_y0z1 = (float)*(features + ox_y0z1 + r);
-			float fx_y1z0 = (float)*(features + ox_y1z0 + r);
-			float fx_y1z1 = (float)*(features + ox_y1z1 + r);
 
-			float fy_x0z0 = (float)*(features + oy_x0z0 + r);
-			float fy_x0z1 = (float)*(features + oy_x0z1 + r);
-			float fy_x1z0 = (float)*(features + oy_x1z0 + r);
-			float fy_x1z1 = (float)*(features + oy_x1z1 + r);
-
-			float fz_x0y0 = (float)*(features + oz_x0y0 + r);
-			float fz_x0y1 = (float)*(features + oz_x0y1 + r);
-			float fz_x1y0 = (float)*(features + oz_x1y0 + r);
-			float fz_x1y1 = (float)*(features + oz_x1y1 + r);
-
-			float w000 = (1 - w[0]) * (1 - w[1]) * (1 - w[2]);
-			float w001 = w[0] * (1 - w[1]) * (1 - w[2]);
-			float w010 = (1 - w[0]) * w[1] * (1 - w[2]);
-			float w011 = w[0] * w[1] * (1 - w[2]);
-			float w100 = (1 - w[0]) * (1 - w[1]) * w[2];
-			float w101 = w[0] * (1 - w[1]) * w[2];
-			float w110 = (1 - w[0]) * w[1] * w[2];
-			float w111 = w[0] * w[1] * w[2];
 
 // atomicAdd(__half2) is only supported with compute capability 60 and above
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
 			if (R > 1 && std::is_same<GRAD_T, __half>::value) {
 				TCNN_PRAGMA_UNROLL
 				for(uint32_t r = 0; r < R; r+=2){
-					__half2 v00 = {
-						(__half)(go * w00),
-						(__half)(go * w00)
-					};
-					__half2 v01 = {
-						(__half)(go * w01),
-						(__half)(go * w01)
-					};
-					__half2 v10 = {
-						(__half)(go * w10),
-						(__half)(go * w10)
-					};
-					__half2 v11 = {
-						(__half)(go * w11),
-						(__half)(go * w11)
-					};
-					atomicAdd((__half2*)(grad_features + o00 + r), v00);
-					atomicAdd((__half2*)(grad_features + o01 + r), v01);
-					atomicAdd((__half2*)(grad_features + o10 + r), v10);
-					atomicAdd((__half2*)(grad_features + o11 + r), v11);
+					float fx_y0z0_0= (float)*(features + ox_y0z0 + r);
+					float fx_y0z1_0= (float)*(features + ox_y0z1 + r);
+					float fx_y1z0_0= (float)*(features + ox_y1z0 + r);
+					float fx_y1z1_0= (float)*(features + ox_y1z1 + r);
+					float fy_x0z0_0= (float)*(features + oy_x0z0 + r);
+					float fy_x0z1_0= (float)*(features + oy_x0z1 + r);
+					float fy_x1z0_0= (float)*(features + oy_x1z0 + r);
+					float fy_x1z1_0= (float)*(features + oy_x1z1 + r);
+					float fz_x0y0_0= (float)*(features + oz_x0y0 + r);
+					float fz_x0y1_0= (float)*(features + oz_x0y1 + r);
+					float fz_x1y0_0= (float)*(features + oz_x1y0 + r);
+					float fz_x1y1_0= (float)*(features + oz_x1y1 + r);
+
+					float fx_y0z0_1= (float)*(features + ox_y0z0 + r + 1);
+					float fx_y0z1_1= (float)*(features + ox_y0z1 + r + 1);
+					float fx_y1z0_1= (float)*(features + ox_y1z0 + r + 1);
+					float fx_y1z1_1= (float)*(features + ox_y1z1 + r + 1);
+					float fy_x0z0_1= (float)*(features + oy_x0z0 + r + 1);
+					float fy_x0z1_1= (float)*(features + oy_x0z1 + r + 1);
+					float fy_x1z0_1= (float)*(features + oy_x1z0 + r + 1);
+					float fy_x1z1_1= (float)*(features + oy_x1z1 + r + 1);
+					float fz_x0y0_1= (float)*(features + oz_x0y0 + r + 1);
+					float fz_x0y1_1= (float)*(features + oz_x0y1 + r + 1);
+					float fz_x1y0_1= (float)*(features + oz_x1y0 + r + 1);
+					float fz_x1y1_1= (float)*(features + oz_x1y1 + r + 1);
+
+					float gx_y0z0_0 = go * ((w000 * fy_x0z0_0 * fz_x0y0_0) + (w001 * fy_x1z0_0 * fz_x1y0_0));
+					float gx_y0z1_0 = go * ((w100 * fy_x0z1_0 * fz_x0y0_0) + (w101 * fy_x1z1_0 * fz_x1y0_0));
+					float gx_y1z0_0 = go * ((w010 * fy_x0z0_0 * fz_x0y1_0) + (w011 * fy_x1z0_0 * fz_x1y1_0));
+					float gx_y1z1_0 = go * ((w110 * fy_x0z1_0 * fz_x0y1_0) + (w111 * fy_x1z1_0 * fz_x1y1_0));
+					float gy_x0z0_0 = go * ((w000 * fx_y0z0_0 * fz_x0y0_0) + (w010 * fx_y1z0_0 * fz_x0y1_0));
+					float gy_x0z1_0 = go * ((w100 * fx_y0z1_0 * fz_x0y0_0) + (w110 * fx_y1z1_0 * fz_x0y1_0));
+					float gy_x1z0_0 = go * ((w001 * fx_y0z0_0 * fz_x1y0_0) + (w011 * fx_y1z0_0 * fz_x1y1_0));
+					float gy_x1z1_0 = go * ((w101 * fx_y0z1_0 * fz_x1y0_0) + (w111 * fx_y1z1_0 * fz_x1y1_0));
+					float gz_x0y0_0 = go * ((w000 * fx_y0z0_0 * fy_x0z0_0) + (w100 * fx_y0z1_0 * fy_x0z1_0));
+					float gz_x0y1_0 = go * ((w010 * fx_y1z0_0 * fy_x0z0_0) + (w110 * fx_y1z1_0 * fy_x0z1_0));
+					float gz_x1y0_0 = go * ((w001 * fx_y0z0_0 * fy_x1z0_0) + (w101 * fx_y0z1_0 * fy_x1z1_0));
+					float gz_x1y1_0 = go * ((w011 * fx_y1z0_0 * fy_x1z0_0) + (w111 * fx_y1z1_0 * fy_x1z1_0));
+					float gx_y0z0_1 = go * ((w000 * fy_x0z0_1 * fz_x0y0_1) + (w001 * fy_x1z0_1 * fz_x1y0_1));
+					float gx_y0z1_1 = go * ((w100 * fy_x0z1_1 * fz_x0y0_1) + (w101 * fy_x1z1_1 * fz_x1y0_1));
+					float gx_y1z0_1 = go * ((w010 * fy_x0z0_1 * fz_x0y1_1) + (w011 * fy_x1z0_1 * fz_x1y1_1));
+					float gx_y1z1_1 = go * ((w110 * fy_x0z1_1 * fz_x0y1_1) + (w111 * fy_x1z1_1 * fz_x1y1_1));
+					float gy_x0z0_1 = go * ((w000 * fx_y0z0_1 * fz_x0y0_1) + (w010 * fx_y1z0_1 * fz_x0y1_1));
+					float gy_x0z1_1 = go * ((w100 * fx_y0z1_1 * fz_x0y0_1) + (w110 * fx_y1z1_1 * fz_x0y1_1));
+					float gy_x1z0_1 = go * ((w001 * fx_y0z0_1 * fz_x1y0_1) + (w011 * fx_y1z0_1 * fz_x1y1_1));
+					float gy_x1z1_1 = go * ((w101 * fx_y0z1_1 * fz_x1y0_1) + (w111 * fx_y1z1_1 * fz_x1y1_1));
+					float gz_x0y0_1 = go * ((w000 * fx_y0z0_1 * fy_x0z0_1) + (w100 * fx_y0z1_1 * fy_x0z1_1));
+					float gz_x0y1_1 = go * ((w010 * fx_y1z0_1 * fy_x0z0_1) + (w110 * fx_y1z1_1 * fy_x0z1_1));
+					float gz_x1y0_1 = go * ((w001 * fx_y0z0_1 * fy_x1z0_1) + (w101 * fx_y0z1_1 * fy_x1z1_1));
+					float gz_x1y1_1 = go * ((w011 * fx_y1z0_1 * fy_x1z0_1) + (w111 * fx_y1z1_1 * fy_x1z1_1));
+					__half2 vx_y0z0 = { (__half)gx_y0z0_0, (__half)gx_y0z0_1 };
+					__half2 vx_y0z1 = { (__half)gx_y0z1_0, (__half)gx_y0z1_1 };
+					__half2 vx_y1z0 = { (__half)gx_y1z0_0, (__half)gx_y1z0_1 };
+					__half2 vx_y1z1 = { (__half)gx_y1z1_0, (__half)gx_y1z1_1 };
+					__half2 vy_x0z0 = { (__half)gy_x0z0_0, (__half)gy_x0z0_1 };
+					__half2 vy_x0z1 = { (__half)gy_x0z1_0, (__half)gy_x0z1_1 };
+					__half2 vy_x1z0 = { (__half)gy_x1z0_0, (__half)gy_x1z0_1 };
+					__half2 vy_x1z1 = { (__half)gy_x1z1_0, (__half)gy_x1z1_1 };
+					__half2 vz_x0y0 = { (__half)gz_x0y0_0, (__half)gz_x0y0_1 };
+					__half2 vz_x0y1 = { (__half)gz_x0y1_0, (__half)gz_x0y1_1 };
+					__half2 vz_x1y0 = { (__half)gz_x1y0_0, (__half)gz_x1y0_1 };
+					__half2 vz_x1y1 = { (__half)gz_x1y1_0, (__half)gz_x1y1_1 };
+
+					atomicAdd((__half2*)(grad_features + ox_y0z0 + r), vx_y0z0);
+					atomicAdd((__half2*)(grad_features + ox_y0z1 + r), vx_y0z1);
+					atomicAdd((__half2*)(grad_features + ox_y1z0 + r), vx_y1z0);
+					atomicAdd((__half2*)(grad_features + ox_y1z1 + r), vx_y1z1);
+					atomicAdd((__half2*)(grad_features + oy_x0z0 + r), vy_x0z0);
+					atomicAdd((__half2*)(grad_features + oy_x0z1 + r), vy_x0z1);
+					atomicAdd((__half2*)(grad_features + oy_x1z0 + r), vy_x1z0);
+					atomicAdd((__half2*)(grad_features + oy_x1z1 + r), vy_x1z1);
+					atomicAdd((__half2*)(grad_features + oz_x0y0 + r), vz_x0y0);
+					atomicAdd((__half2*)(grad_features + oz_x0y1 + r), vz_x0y1);
+					atomicAdd((__half2*)(grad_features + oz_x1y0 + r), vz_x1y0);
+					atomicAdd((__half2*)(grad_features + oz_x1y1 + r), vz_x1y1);
 				}
 			} else
 #endif
-
-
-			// float f000 = fx_y0z0 * fy_x0z0 * fz_x0y0;
-			// float f001 = fx_y0z0 * fy_x1z0 * fz_x1y0;
-			// float f010 = fx_y1z0 * fy_x0z0 * fz_x0y1;
-			// float f011 = fx_y1z0 * fy_x1z0 * fz_x1y1;
-			// float f100 = fx_y0z1 * fy_x0z1 * fz_x0y0;
-			// float f101 = fx_y0z1 * fy_x1z1 * fz_x1y0;
-			// float f110 = fx_y1z1 * fy_x0z1 * fz_x0y1;
-			// float f111 = fx_y1z1 * fy_x1z1 * fz_x1y1;
-			// fs += (w000 * f000) + (w001 * f001) + (w010 * f010) + (w011 * f011) + (w100 * f100) + (w101 * f101) + (w110 * f110) + (w111 * f111);
 			TCNN_PRAGMA_UNROLL
 			for(int r = 0; r < R; r++){
-				atomicAdd(grad_features + ox_y0z0 + r, (GRAD_T)(go * w00));
+				float fx_y0z0 = (float)*(features + ox_y0z0 + r);
+				float fx_y0z1 = (float)*(features + ox_y0z1 + r);
+				float fx_y1z0 = (float)*(features + ox_y1z0 + r);
+				float fx_y1z1 = (float)*(features + ox_y1z1 + r);
+
+				float fy_x0z0 = (float)*(features + oy_x0z0 + r);
+				float fy_x0z1 = (float)*(features + oy_x0z1 + r);
+				float fy_x1z0 = (float)*(features + oy_x1z0 + r);
+				float fy_x1z1 = (float)*(features + oy_x1z1 + r);
+
+				float fz_x0y0 = (float)*(features + oz_x0y0 + r);
+				float fz_x0y1 = (float)*(features + oz_x0y1 + r);
+				float fz_x1y0 = (float)*(features + oz_x1y0 + r);
+				float fz_x1y1 = (float)*(features + oz_x1y1 + r);
+
+				float gx_y0z0 = go * ((w000 * fy_x0z0 * fz_x0y0) + (w001 * fy_x1z0 * fz_x1y0));
+				float gx_y0z1 = go * ((w100 * fy_x0z1 * fz_x0y0) + (w101 * fy_x1z1 * fz_x1y0));
+				float gx_y1z0 = go * ((w010 * fy_x0z0 * fz_x0y1) + (w011 * fy_x1z0 * fz_x1y1));
+				float gx_y1z1 = go * ((w110 * fy_x0z1 * fz_x0y1) + (w111 * fy_x1z1 * fz_x1y1));
+				float gy_x0z0 = go * ((w000 * fx_y0z0 * fz_x0y0) + (w010 * fx_y1z0 * fz_x0y1));
+				float gy_x0z1 = go * ((w100 * fx_y0z1 * fz_x0y0) + (w110 * fx_y1z1 * fz_x0y1));
+				float gy_x1z0 = go * ((w001 * fx_y0z0 * fz_x1y0) + (w011 * fx_y1z0 * fz_x1y1));
+				float gy_x1z1 = go * ((w101 * fx_y0z1 * fz_x1y0) + (w111 * fx_y1z1 * fz_x1y1));
+				float gz_x0y0 = go * ((w000 * fx_y0z0 * fy_x0z0) + (w100 * fx_y0z1 * fy_x0z1));
+				float gz_x0y1 = go * ((w010 * fx_y1z0 * fy_x0z0) + (w110 * fx_y1z1 * fy_x0z1));
+				float gz_x1y0 = go * ((w001 * fx_y0z0 * fy_x1z0) + (w101 * fx_y0z1 * fy_x1z1));
+				float gz_x1y1 = go * ((w011 * fx_y1z0 * fy_x1z0) + (w111 * fx_y1z1 * fy_x1z1));
+				atomicAdd(grad_features + ox_y0z0 + r, (GRAD_T)(gx_y0z0));
+				atomicAdd(grad_features + ox_y0z1 + r, (GRAD_T)(gx_y0z1));
+				atomicAdd(grad_features + ox_y1z0 + r, (GRAD_T)(gx_y1z0));
+				atomicAdd(grad_features + ox_y1z1 + r, (GRAD_T)(gx_y1z1));
+				atomicAdd(grad_features + oy_x0z0 + r, (GRAD_T)(gy_x0z0));
+				atomicAdd(grad_features + oy_x0z1 + r, (GRAD_T)(gy_x0z1));
+				atomicAdd(grad_features + oy_x1z0 + r, (GRAD_T)(gy_x1z0));
+				atomicAdd(grad_features + oy_x1z1 + r, (GRAD_T)(gy_x1z1));
+				atomicAdd(grad_features + oz_x0y0 + r, (GRAD_T)(gz_x0y0));
+				atomicAdd(grad_features + oz_x0y1 + r, (GRAD_T)(gz_x0y1));
+				atomicAdd(grad_features + oz_x1y0 + r, (GRAD_T)(gz_x1y0));
+				atomicAdd(grad_features + oz_x1y1 + r, (GRAD_T)(gz_x1y1));
 			}
 		}
 	}
