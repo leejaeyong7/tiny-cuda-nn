@@ -296,7 +296,7 @@ __global__ void kernel_qff_3_forward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
     features += f*2*Rs*C + s*Rs*C;
 
@@ -329,7 +329,7 @@ __global__ void kernel_qff_3_backward_features(
     const uint32_t s = blockIdx.z;
 
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
     grad_features += f*2*C*Rs + s*C*Rs;
@@ -363,7 +363,7 @@ __global__ void kernel_qff_3_backward_input(
     const uint32_t s = blockIdx.z;
 
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
 	// grad_points += b*N_POS_DIMS;
@@ -406,7 +406,7 @@ __global__ void kernel_qff_3_backward_input_backward(
     const uint32_t s = blockIdx.z;
 
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
     features += f*2*C*Rs + s*C*Rs;
@@ -449,7 +449,7 @@ __global__ void kernel_qff_3_backward_input_backward_input(
     const uint32_t s = blockIdx.z;
 
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
 	grad2_points += b*N_POS_DIMS;
@@ -704,10 +704,10 @@ Encoding<T>* create_qff_3_encoding_by_feats(const json& encoding) {
 
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		// case 1: return new QFF3<T, D, 1>{ TCNN_QFF_PARAMS };
-		// case 2: return new QFF3<T, D, 2>{ TCNN_QFF_PARAMS };
+		case 1: return new QFF3<T, D, 1>{ TCNN_QFF_PARAMS };
+		case 2: return new QFF3<T, D, 2>{ TCNN_QFF_PARAMS };
 		case 4: return new QFF3<T, D, 4>{ TCNN_QFF_PARAMS };
-		// case 8: return new QFF3<T, D, 8>{ TCNN_QFF_PARAMS };
+		case 8: return new QFF3<T, D, 8>{ TCNN_QFF_PARAMS };
 		default: throw std::runtime_error{"QFF: number of features must be 1, 2, 4 or 8"};
 	}
 #undef TCNN_QFF_PARAMS

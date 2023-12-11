@@ -294,7 +294,7 @@ __global__ void kernel_qff_2_forward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
 
 	// skip freq / sc
     features += f*2*D*C*Q*Q*R + s*D*C*Q*Q*R;
@@ -326,7 +326,7 @@ __global__ void kernel_qff_2_backward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
-    const float freq = powf(2.0, freq_base);
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
 
 	// skip freq / sc
     grad_features 	+= f*2*D*C*Q*Q*R + s*D*C*Q*Q*R;
