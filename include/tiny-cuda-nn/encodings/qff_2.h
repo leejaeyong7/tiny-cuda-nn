@@ -304,7 +304,7 @@ __global__ void kernel_qff_2_forward(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < D; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
 	}
 	trilinear_interp<T, D, C, R>(features, Q, sc, outputs, b, f*2*C + s*C);
 }
@@ -337,7 +337,7 @@ __global__ void kernel_qff_2_backward(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < D; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
 	}
 	grad_trilinear_interp<GRAD_T, T, D, C, R>(grad_features, features, Q, sc, grad_outputs, b, f*2*C + s*C);
 }

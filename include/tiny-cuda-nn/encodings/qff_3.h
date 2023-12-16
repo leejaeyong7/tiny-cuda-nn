@@ -305,7 +305,7 @@ __global__ void kernel_qff_3_forward(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
 	}
 	nlinear_interp<T, N_POS_DIMS, C>(features, R, sc, outputs, b, f*2*C + s*C);
 }
@@ -339,7 +339,7 @@ __global__ void kernel_qff_3_backward_features(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
 	}
 	grad_nlinear_interp<GRAD_T, T, N_POS_DIMS, C>(grad_features, R, sc, grad_output, b, f*2*C + s*C);
 }
@@ -375,8 +375,8 @@ __global__ void kernel_qff_3_backward_input(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
-		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq; 
 	}
 
 	grad_point_helper<T, N_POS_DIMS, C>(grad_points, features, R, sc, dsc, grad_output, b, f*2*C + s*C);
@@ -421,8 +421,8 @@ __global__ void kernel_qff_3_backward_input_backward(
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
 		float dp = grad_grad_points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
-		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq; 
 		dps[i] = dp;
 	}
 
@@ -464,9 +464,9 @@ __global__ void kernel_qff_3_backward_input_backward_input(
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
 		float dp = grad_grad_points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
-		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
-		ddsc[i] = ((s == 0) ? -__sinf(freq * p) : -__cosf(freq * p)) * freq * freq;
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq; 
+		ddsc[i] = -sinf(freq * (p - 0.5) + s * M_HI) * freq * freq;
 		dps[i] = dp;
 	}
 
