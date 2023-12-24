@@ -31,14 +31,14 @@ struct ForwardContext : public Context {
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
 class QFF : public Encoding<T> {
 public:
-	QFF(uint32_t log2_min_freq,
-		uint32_t log2_max_freq,
+	QFF(int32_t log2_min_freq,
+		int32_t log2_max_freq,
 		uint32_t n_quants,
 		uint32_t n_frequencies)
-	: m_log2_min_freq{log2_min_freq}, 
-	  m_log2_max_freq{log2_max_freq}, 
-	  m_n_quants{n_quants}, 
-	  m_n_frequencies{n_frequencies} 
+	: m_log2_min_freq{log2_min_freq},
+	  m_log2_max_freq{log2_max_freq},
+	  m_n_quants{n_quants},
+	  m_n_frequencies{n_frequencies}
 	{
 		m_n_output_dims = m_n_frequencies * 2 * C;
 	}
@@ -110,8 +110,8 @@ protected:
 
 	uint32_t m_n_frequencies;
 	uint32_t m_n_quants;
-	uint32_t m_log2_min_freq;
-	uint32_t m_log2_max_freq;
+	int32_t m_log2_min_freq;
+	int32_t m_log2_max_freq;
 
 	// derived sizes
 	uint32_t m_n_params;

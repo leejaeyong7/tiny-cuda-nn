@@ -282,8 +282,8 @@ __global__ void kernel_qff_2_forward(
     const uint32_t B, // batch size
 	const uint32_t F, // freq size
     const uint32_t Q, // quantization size
-    const uint32_t min_log2_freq,
-    const uint32_t max_log2_freq,
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P, // padding (not used)
     MatrixView<const float> points,      // Bx3
     const T * __restrict__ features,     // Fx2x3xCxQxR
@@ -313,8 +313,8 @@ __global__ void kernel_qff_2_backward(
     const uint32_t B, // batch size
 	const uint32_t F, // freq size
     const uint32_t Q, // quantization size
-    const uint32_t min_log2_freq,
-    const uint32_t max_log2_freq,
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P, // padding (not used)
     MatrixView<const float> points,      // Bx3
     T * __restrict__ features,     // Fx2x3xCxQxR
@@ -359,8 +359,8 @@ class QFF2 : public QFF<T, D, C, R> {
 	using grad_t = float;
 #endif
 public:
-	QFF2(uint32_t log2_min_freq,
-		 uint32_t log2_max_freq,
+	QFF2(int32_t log2_min_freq,
+		 int32_t log2_max_freq,
 		 uint32_t n_quants,
 		 uint32_t n_frequencies)
 	: QFF<T, D, C, R>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
@@ -471,8 +471,8 @@ template <typename T, uint32_t D, uint32_t C>
 Encoding<T>* create_qff_2_encoding_with_dim_and_feat(const json& encoding) {
 
 #define TCNN_QFF_PARAMS \
-	encoding.value("log2_min_freq", 0u), \
-	encoding.value("log2_max_freq", 6u), \
+	encoding.value("log2_min_freq", 0), \
+	encoding.value("log2_max_freq", 6), \
 	encoding.value("n_quants", 64u), \
 	encoding.value("n_frequencies", 6u), \
 

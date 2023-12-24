@@ -17,14 +17,14 @@ TCNN_NAMESPACE_BEGIN
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_point_helper(
-    MatrixView<float> grad_points, 
-	const T * __restrict__ features, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    const float dsc[N_POS_DIMS], 
+    MatrixView<float> grad_points,
+	const T * __restrict__ features,
+    const uint32_t R,
+    const float sc[N_POS_DIMS],
+    const float dsc[N_POS_DIMS],
     MatrixView<const T> grad_output,
 	const uint32_t b,
-	const uint32_t out_offset 
+	const uint32_t out_offset
 ){
 	// for b, r, r, rxc
     float w[N_POS_DIMS];
@@ -61,11 +61,11 @@ __device__ void grad_point_helper(
             offset += (l & (1 << inv_i) ? p1[i] : p0[i]) * o[i];
             TCNN_PRAGMA_UNROLL
             for(uint32_t k  =0; k < N_POS_DIMS; k++){
-                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) : 
+                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) :
                                          ((l & (1 << inv_i)) ? w[i] : 1 - w[i]);
             }
         }
-        
+
         TCNN_PRAGMA_UNROLL
         for(int c = 0; c < C; c++){
             float feature = (float)*(features + offset*C + c);
@@ -88,13 +88,13 @@ __device__ void grad_point_helper(
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_grad_helper(
-    const T * __restrict__ features, 
-    GRAD_T * __restrict__ grad2_features, 
-    MatrixView<T> grad_grad_output, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    const float dsc[N_POS_DIMS], 
-    const float dps[N_POS_DIMS], 
+    const T * __restrict__ features,
+    GRAD_T * __restrict__ grad2_features,
+    MatrixView<T> grad_grad_output,
+    const uint32_t R,
+    const float sc[N_POS_DIMS],
+    const float dsc[N_POS_DIMS],
+    const float dps[N_POS_DIMS],
     MatrixView<const T>grad_outputs,
     const uint32_t b,
     const uint32_t out_offset
@@ -134,7 +134,7 @@ __device__ void grad_grad_helper(
 
             TCNN_PRAGMA_UNROLL
             for(uint32_t k = 0; k < N_POS_DIMS; k++){
-                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) : 
+                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) :
                                          ((l & (1 << inv_i)) ? w[i] : 1 - w[i]);
             }
         }
@@ -186,13 +186,13 @@ __device__ void grad_grad_helper(
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad2_points_helper(
-    const T * __restrict__ features, 
-    float * __restrict__ grad2_points, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    const float dsc[N_POS_DIMS], 
-    const float ddsc[N_POS_DIMS], 
-    const float dps[N_POS_DIMS], 
+    const T * __restrict__ features,
+    float * __restrict__ grad2_points,
+    const uint32_t R,
+    const float sc[N_POS_DIMS],
+    const float dsc[N_POS_DIMS],
+    const float ddsc[N_POS_DIMS],
+    const float dps[N_POS_DIMS],
     MatrixView<const T>grad_output,
     const uint32_t b,
     const uint32_t out_offset
@@ -281,11 +281,11 @@ __device__ void grad2_points_helper(
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __global__ void kernel_qff_3_forward(
-    const uint32_t B, 
-	const uint32_t F, 
+    const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
     MatrixView<const float> points,      // Bx3
     const T * __restrict__ features,     // Fx2xRsxC
@@ -313,11 +313,11 @@ __global__ void kernel_qff_3_forward(
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
 __global__ void kernel_qff_3_backward_features(
-	const uint32_t B, 
-	const uint32_t F, 
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -346,11 +346,11 @@ __global__ void kernel_qff_3_backward_features(
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __global__ void kernel_qff_3_backward_input(
-	const uint32_t B, 
-	const uint32_t F, 
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -376,7 +376,7 @@ __global__ void kernel_qff_3_backward_input(
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
 		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
-		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq; 
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq;
 	}
 
 	grad_point_helper<T, N_POS_DIMS, C>(grad_points, features, R, sc, dsc, grad_output, b, f*2*C + s*C);
@@ -387,11 +387,11 @@ __global__ void kernel_qff_3_backward_input(
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
 __global__ void kernel_qff_3_backward_input_backward(
-	const uint32_t B, 
-	const uint32_t F, 
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -422,7 +422,7 @@ __global__ void kernel_qff_3_backward_input_backward(
 		float p = points(i, b);
 		float dp = grad_grad_points(i, b);
 		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
-		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq; 
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq;
 		dps[i] = dp;
 	}
 
@@ -431,11 +431,11 @@ __global__ void kernel_qff_3_backward_input_backward(
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __global__ void kernel_qff_3_backward_input_backward_input(
-	const uint32_t B, 
-	const uint32_t F, 
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -465,7 +465,7 @@ __global__ void kernel_qff_3_backward_input_backward_input(
 		float p = points(i, b);
 		float dp = grad_grad_points(i, b);
 		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
-		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq; 
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq;
 		ddsc[i] = -sinf(freq * (p - 0.5) + s * M_HI) * freq * freq;
 		dps[i] = dp;
 	}
@@ -481,8 +481,8 @@ class QFF3: public QFF<T, D, C, 1> {
 	using grad_t = float;
 #endif
 public:
-	QFF3(uint32_t log2_min_freq,
-		 uint32_t log2_max_freq,
+	QFF3(int32_t log2_min_freq,
+		 int32_t log2_max_freq,
 		 uint32_t n_quants,
 		 uint32_t n_frequencies)
 	: QFF<T, D, C, 1>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
@@ -575,7 +575,7 @@ public:
 				this->m_n_to_pad, // P
 				dL_doutput.view(),
 				input.view(),
-				grad_array 
+				grad_array
 			);
 
 			if (!std::is_same<grad_t, T>::value) {
@@ -649,7 +649,7 @@ public:
 			this->m_log2_min_freq, // I
 			this->m_log2_max_freq, // X
 			this->m_n_to_pad, // P
-			
+
 			dL_doutput.view(),
 			input.view(),
 			dL_ddLdinput.view(),
@@ -676,7 +676,7 @@ public:
 				this->m_log2_min_freq, // I
 				this->m_log2_max_freq, // X
 				this->m_n_to_pad, // P
-				
+
 				dL_doutput.view(),
 				input.view(),
 				dL_ddLdinput.view(),
@@ -697,8 +697,8 @@ template <typename T, uint32_t D>
 Encoding<T>* create_qff_3_encoding_by_feats(const json& encoding) {
 
 #define TCNN_QFF_PARAMS \
-	encoding.value("log2_min_freq", 0u), \
-	encoding.value("log2_max_freq", 6u), \
+	encoding.value("log2_min_freq", 0), \
+	encoding.value("log2_max_freq", 6), \
 	encoding.value("n_quants", 64u), \
 	encoding.value("n_frequencies", 6u), \
 
