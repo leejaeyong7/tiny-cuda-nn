@@ -45,17 +45,15 @@
 #include <cutlass/numeric_conversion.h>
 #include <cutlass/numeric_types.h>
 
-#include <iostream>
-#include <map>
 #include <type_traits>
 
-TCNN_NAMESPACE_BEGIN
+namespace tcnn {
 
 #define CUTLASS_CHECK_THROW(x)                                                                                        \
 	do {                                                                                                                   \
-		cutlass::Status error = x;                                                                                    \
-		if (error != cutlass::Status::kSuccess)                                                                            \
-			throw std::runtime_error(std::string(FILE_LINE " " #x " failed with error ") + cutlassGetStatusString(error)); \
+		cutlass::Status _result = x;                                                                                    \
+		if (_result != cutlass::Status::kSuccess)                                                                            \
+			throw std::runtime_error(std::string(FILE_LINE " " #x " failed with error ") + cutlassGetStatusString(_result)); \
 	} while(0)
 
 using SmArch = std::conditional_t<MIN_GPU_ARCH >= 80,
@@ -516,4 +514,4 @@ void fc_multiply_split_k(cudaStream_t stream, const GPUMatrixDynamic<TypeA>& A, 
 	fc_multiply_split_k<config>(stream, A, B, D, D, split_k_slices, beta);
 }
 
-TCNN_NAMESPACE_END
+}
