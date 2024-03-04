@@ -33,15 +33,13 @@
 #include <tiny-cuda-nn/gpu_matrix.h>
 #include <tiny-cuda-nn/object.h>
 
-TCNN_NAMESPACE_BEGIN
+namespace tcnn {
 
 template <typename T>
 class Loss : public ObjectWithMutableHyperparams {
 public:
 	virtual void evaluate(
 		cudaStream_t stream,
-		const uint32_t stride,
-		const uint32_t dims,
 		const float loss_scale,
 		const GPUMatrix<T>& prediction,
 		const GPUMatrix<float>& target,
@@ -49,9 +47,30 @@ public:
 		GPUMatrix<T>& gradients,
 		const GPUMatrix<float>* data_pdf = nullptr
 	) const = 0;
+
+	void evaluate(
+		const float loss_scale,
+		const GPUMatrix<T>& prediction,
+		const GPUMatrix<float>& target,
+		GPUMatrix<float>& values,
+		GPUMatrix<T>& gradients,
+		const GPUMatrix<float>* data_pdf = nullptr
+	) const {
+		evaluate(nullptr, loss_scale, prediction, target, values, gradients, data_pdf);
+	}
 };
 
 template <typename T>
 Loss<T>* create_loss(const json& params);
 
-TCNN_NAMESPACE_END
+template <typename T>
+std::unique_ptr<Loss<T>> default_loss(const std::string& name) {
+	return std::unique_ptr<Loss<T>>{create_loss<T>({{"otype", name}})};
+}
+
+std::vector<std::string> builtin_losses();
+
+template <typename T>
+void register_loss(const std::string& name, const std::function<Loss<T>*(const json&)>& factory);
+
+}

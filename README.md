@@ -45,7 +45,7 @@ using namespace tcnn;
 
 auto model = create_from_config(n_input_dims, n_output_dims, config);
 
-// Train the model (batch_size must be a multiple of tcnn::batch_size_granularity)
+// Train the model (batch_size must be a multiple of tcnn::BATCH_SIZE_GRANULARITY)
 GPUMatrix<float> training_batch_inputs(n_input_dims, batch_size);
 GPUMatrix<float> training_batch_targets(n_output_dims, batch_size);
 
@@ -115,7 +115,7 @@ $ cd tiny-cuda-nn
 
 Then, use CMake to build the project: (on Windows, this must be in a [developer command prompt](https://docs.microsoft.com/en-us/cpp/build/building-on-the-command-line?view=msvc-160#developer_command_prompt))
 ```sh
-tiny-cuda-nn$ cmake . -B build
+tiny-cuda-nn$ cmake . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 tiny-cuda-nn$ cmake --build build --config RelWithDebInfo -j
 ```
 
