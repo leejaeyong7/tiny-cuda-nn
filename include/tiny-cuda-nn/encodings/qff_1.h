@@ -1,10 +1,5 @@
 #pragma once
 
-#include <tiny-cuda-nn/common.h>
-#include <tiny-cuda-nn/encoding.h>
-#include <tiny-cuda-nn/gpu_memory.h>
-#include <tiny-cuda-nn/common_device.h>
-#include <tiny-cuda-nn/interp.h>
 #include <tiny-cuda-nn/encodings/qff.h>
 
 #include <numeric>
@@ -13,7 +8,7 @@
 #include <string>
 #include <vector>
 
-TCNN_NAMESPACE_BEGIN
+namespace tcnn {
 
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
 __device__ void linear_interp(
@@ -31,8 +26,8 @@ __device__ void linear_interp(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < D; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (Q -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), Q - 1);
-		p1[i] = max(min((uint32_t)ceil(p), Q-1), 0);
+		p0[i] = std::min(std::max((uint32_t)floor(p), (uint32_t) 0), Q - 1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), Q-1), (uint32_t) 0);
 		w[i] = p - (float)p0[i];
 	}
 
@@ -75,8 +70,8 @@ __device__ void grad_linear_interp(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < D; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (Q -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), Q - 1);
-		p1[i] = max(min((uint32_t)ceil(p), Q-1), 0);
+		p0[i] = std::min(std::max((uint32_t)floor(p), (uint32_t) 0), Q - 1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), Q-1), (uint32_t) 0);
 		w[i] = p - (float)p0[i];
 	}
 	/**
@@ -278,10 +273,10 @@ public:
 		const GPUMatrixDynamic<T>& dL_doutput,
 		GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_params = false,
-		EGradientMode param_gradients_mode = EGradientMode::Overwrite
+		GradientMode param_gradients_mode = GradientMode::Overwrite
 	) override {
         const uint32_t num_elements = input.n();
-        if ((!dL_dinput && param_gradients_mode == EGradientMode::Ignore) || this->padded_output_width() == 0 || num_elements == 0) {
+        if ((!dL_dinput && param_gradients_mode == GradientMode::Ignore) || this->padded_output_width() == 0 || num_elements == 0) {
 			return;
 		}
 
@@ -290,7 +285,7 @@ public:
 
 
         // If not, accumulate in a temporary buffer and cast later.
-		if(param_gradients_mode != EGradientMode::Ignore){
+		if(param_gradients_mode != GradientMode::Ignore){
 			grad_t * grad_array;
 			GPUMemoryArena::Allocation grad_array_tmp;
 			if (!std::is_same<grad_t, T>::value) {
@@ -301,7 +296,7 @@ public:
 			}
 
 
-			if (param_gradients_mode == EGradientMode::Overwrite) {
+			if (param_gradients_mode == GradientMode::Overwrite) {
 				CUDA_CHECK_THROW(cudaMemsetAsync(grad_array, 0, this->m_n_params * sizeof(grad_t), stream));
 			}
 
@@ -382,4 +377,4 @@ Encoding<T>* create_qff_1_encoding(uint32_t n_dims_to_encode, const json& encodi
 	}
 }
 
-TCNN_NAMESPACE_END
+}

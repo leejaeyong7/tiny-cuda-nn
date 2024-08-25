@@ -1,10 +1,19 @@
 #pragma once
+#include <tiny-cuda-nn/common.h>
+#include <tiny-cuda-nn/common_device.h>
+#include <tiny-cuda-nn/encoding.h>
+#include <tiny-cuda-nn/gpu_memory.h>
+#include <tiny-cuda-nn/multi_stream.h>
+
+
 #include <numeric>
 #include <stdexcept>
 #include <stdint.h>
 #include <string>
 #include <vector>
-TCNN_NAMESPACE_BEGIN
+#include <algorithm>
+namespace tcnn {
+
 static inline  __device__ uint32_t powu(const uint32_t base, const uint32_t exp) {
     uint32_t val = 1;
     for(int i = 0; i < exp; i++){
@@ -30,8 +39,10 @@ __device__ void nlinear_interp(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < D; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		// p0[i] = min(max((uint32_t)floor(p), 0), R-1);
+		// p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		p0[i] = std::min( (uint32_t) std::max((uint32_t)floor(p), (uint32_t) 0), R-1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), (uint32_t)0);
 		w[i] = p - (float)p0[i];
 		o[i] = powu(R, i);
 	}
@@ -77,8 +88,10 @@ __device__ void grad_nlinear_interp(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < D; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		// p0[i] = min(max((uint32_t)floor(p), 0), R-1);
+		// p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		p0[i] = std::min( (uint32_t) std::max((uint32_t)floor(p), (uint32_t) 0), R-1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), (uint32_t)0);
 		w[i] = p - (float)p0[i];
 		o[i] = powu(R, i);
 	}
@@ -116,4 +129,4 @@ __device__ void grad_nlinear_interp(
 	}
 }
 
-TCNN_NAMESPACE_END
+}
