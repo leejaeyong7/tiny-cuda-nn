@@ -1,9 +1,6 @@
 #pragma once
 
-#include <tiny-cuda-nn/common.h>
-#include <tiny-cuda-nn/encoding.h>
-#include <tiny-cuda-nn/gpu_memory.h>
-#include <tiny-cuda-nn/common_device.h>
+#include <tiny-cuda-nn/encodings/ppng.h>
 
 #include <numeric>
 #include <stdexcept>
@@ -11,128 +8,18 @@
 #include <string>
 #include <vector>
 
-TCNN_NAMESPACE_BEGIN
-static inline  __device__ uint32_t powu(const uint32_t base, const uint32_t exp) {
-    uint32_t val = 1;
-    for(int i = 0; i < exp; i++){
-        val *= base;
-    }
-    return val;
-}
-
-template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__device__ void nlinear_interp(
-    const T * __restrict__ features, 
-    const uint32_t R, 
-	const float sc[N_POS_DIMS],
-	MatrixView<T> outputs,
-	const uint32_t b,
-	const uint32_t out_offset
-) {
-	float w[N_POS_DIMS];
-	float p0[N_POS_DIMS];
-	float p1[N_POS_DIMS];
-	uint32_t o[N_POS_DIMS];
-
-	TCNN_PRAGMA_UNROLL
-	for(uint32_t i = 0; i < N_POS_DIMS; i++){
-		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
-		w[i] = p - p0[i];
-		o[i] = powu(R, i);
-	}
-
-	float results[C] = {0};
-	TCNN_PRAGMA_UNROLL
-	for(int l = 0; l < 8; l++) {
-		uint32_t offset = 0;
-		float weight = 1;
-
-		TCNN_PRAGMA_UNROLL
-		for(int i = 0; i < N_POS_DIMS; i++){
-			const uint32_t inv_i = N_POS_DIMS - i - 1;
-			offset += (l & (1 << inv_i) ? p1[i] : p0[i]) * o[i];
-			weight *= (l & (1 << inv_i) ? w[i] : 1 - w[i]);
-		}
-
-		TCNN_PRAGMA_UNROLL
-		for(int c = 0; c < C; c++){
-			results[c] += (float)(*(features + offset *C + c)) * weight;
-		}
-	}
-	TCNN_PRAGMA_UNROLL
-	for(int c = 0; c < C; c++){
-		outputs(out_offset + c, b) = (T)results[c];
-	}
-}
-
-template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
-__device__ void grad_nlinear_interp(
-    GRAD_T * __restrict__ grad_features, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    MatrixView<const T> grad_output,
-	const uint32_t b,
-	const uint32_t out_offset 
-){
-	float w[N_POS_DIMS];
-	float p0[N_POS_DIMS];
-	float p1[N_POS_DIMS];
-	uint32_t o[N_POS_DIMS];
-
-	TCNN_PRAGMA_UNROLL
-	for(uint32_t i = 0; i < N_POS_DIMS; i++){
-		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
-		w[i] = p - p0[i];
-		o[i] = powu(R, i);
-	}
-
-	TCNN_PRAGMA_UNROLL
-	for(int l = 0; l < powu(2, N_POS_DIMS); l++) {
-		uint32_t offset = 0;
-		float weight = 1;
-
-		TCNN_PRAGMA_UNROLL
-		for(int i = 0; i < N_POS_DIMS; i++){
-			const uint32_t inv_i = N_POS_DIMS - i - 1;
-			offset += (l & (1 << inv_i) ? p1[i] : p0[i]) * o[i];
-			weight *= (l & (1 << inv_i) ? w[i] : 1 - w[i]);
-		}
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600 // atomicAdd(__half2) is only supported with compute capability 60 and above
-		if (C > 1 && std::is_same<GRAD_T, __half>::value) {
-			TCNN_PRAGMA_UNROLL
-			for(uint32_t c = 0; c < C; c+=2){
-				__half2 v = {
-					(__half)((float)grad_output(out_offset + c, b) * weight),
-					(__half)((float)grad_output(out_offset + c + 1, b) * weight)
-				};
-				atomicAdd((__half2*)(grad_features + offset * C + c), v);
-			}
-		} else
-#endif
-		{
-			TCNN_PRAGMA_UNROLL
-			for(int c = 0; c < C; c++){
-				float go = (float)grad_output(out_offset + c, b);
-				atomicAdd(grad_features + offset *C + c, (GRAD_T)(go * weight));
-			}
-		}
-	}
-}
+namespace tcnn {
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_point_helper(
-    MatrixView<float> grad_points, 
-	const T * __restrict__ features, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    const float dsc[N_POS_DIMS], 
+    MatrixView<float> grad_points,
+	const T * __restrict__ features,
+    const uint32_t R,
+    const float sc[N_POS_DIMS],
+    const float dsc[N_POS_DIMS],
     MatrixView<const T> grad_output,
 	const uint32_t b,
-	const uint32_t out_offset 
+	const uint32_t out_offset
 ){
 	// for b, r, r, rxc
     float w[N_POS_DIMS];
@@ -144,8 +31,8 @@ __device__ void grad_point_helper(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < N_POS_DIMS; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		p0[i] = std::min( (uint32_t) std::max((uint32_t)floor(p), (uint32_t) 0), R-1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), (uint32_t)0);
 		w[i] = p - p0[i];
 		o[i] = powu(R, i);
 		dw[i] = dsc[i] * 0.5 * (R - 1);
@@ -169,11 +56,11 @@ __device__ void grad_point_helper(
             offset += (l & (1 << inv_i) ? p1[i] : p0[i]) * o[i];
             TCNN_PRAGMA_UNROLL
             for(uint32_t k  =0; k < N_POS_DIMS; k++){
-                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) : 
+                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) :
                                          ((l & (1 << inv_i)) ? w[i] : 1 - w[i]);
             }
         }
-        
+
         TCNN_PRAGMA_UNROLL
         for(int c = 0; c < C; c++){
             float feature = (float)*(features + offset*C + c);
@@ -196,13 +83,13 @@ __device__ void grad_point_helper(
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad_grad_helper(
-    const T * __restrict__ features, 
-    GRAD_T * __restrict__ grad2_features, 
-    MatrixView<T> grad_grad_output, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    const float dsc[N_POS_DIMS], 
-    const float dps[N_POS_DIMS], 
+    const T * __restrict__ features,
+    GRAD_T * __restrict__ grad2_features,
+    MatrixView<T> grad_grad_output,
+    const uint32_t R,
+    const float sc[N_POS_DIMS],
+    const float dsc[N_POS_DIMS],
+    const float dps[N_POS_DIMS],
     MatrixView<const T>grad_outputs,
     const uint32_t b,
     const uint32_t out_offset
@@ -217,8 +104,10 @@ __device__ void grad_grad_helper(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < N_POS_DIMS; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		// p0[i] = std::min(std::max((uint32_t)floor(p), 0), R-1);
+		// p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), 0);
+		p0[i] = std::min( (uint32_t) std::max((uint32_t)floor(p), (uint32_t) 0), R-1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), (uint32_t)0);
 		w[i] = p - p0[i];
 		o[i] = powu(R, i);
 		dw[i] = dsc[i] * 0.5 * (R - 1);
@@ -242,7 +131,7 @@ __device__ void grad_grad_helper(
 
             TCNN_PRAGMA_UNROLL
             for(uint32_t k = 0; k < N_POS_DIMS; k++){
-                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) : 
+                weights[k] *= (i == k) ? ((l & (1 << inv_i)) ? dw[i] : -dw[i]) :
                                          ((l & (1 << inv_i)) ? w[i] : 1 - w[i]);
             }
         }
@@ -294,13 +183,13 @@ __device__ void grad_grad_helper(
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
 __device__ void grad2_points_helper(
-    const T * __restrict__ features, 
-    float * __restrict__ grad2_points, 
-    const uint32_t R, 
-    const float sc[N_POS_DIMS], 
-    const float dsc[N_POS_DIMS], 
-    const float ddsc[N_POS_DIMS], 
-    const float dps[N_POS_DIMS], 
+    const T * __restrict__ features,
+    float * __restrict__ grad2_points,
+    const uint32_t R,
+    const float sc[N_POS_DIMS],
+    const float dsc[N_POS_DIMS],
+    const float ddsc[N_POS_DIMS],
+    const float dps[N_POS_DIMS],
     MatrixView<const T>grad_output,
     const uint32_t b,
     const uint32_t out_offset
@@ -316,8 +205,10 @@ __device__ void grad2_points_helper(
 	TCNN_PRAGMA_UNROLL
 	for(uint32_t i = 0; i < N_POS_DIMS; i++){
 		const float p = ((sc[i] + 1) * 0.5) * (R -1);
-		p0[i] = min(max((uint32_t)floor(p), 0), R-1);
-		p1[i] = max(min((uint32_t)ceil(p), R-1), 0);
+		// p0[i] = std::min(std::max((uint32_t)floor(p), 0), R-1);
+		// p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), 0);
+		p0[i] = std::min( (uint32_t) std::max((uint32_t)floor(p), (uint32_t) 0), R-1);
+		p1[i] = std::max(std::min((uint32_t)ceil(p), R-1), (uint32_t)0);
 		w[i] = p - p0[i];
 		o[i] = powu(R, i);
 		dw[i] = dsc[i] * 0.5 * (R - 1);
@@ -388,12 +279,12 @@ __device__ void grad2_points_helper(
 
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_forward(
-    const uint32_t B, 
-	const uint32_t F, 
+__global__ void kernel_ppng_3_forward(
+    const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
     MatrixView<const float> points,      // Bx3
     const T * __restrict__ features,     // Fx2xRsxC
@@ -403,8 +294,8 @@ __global__ void kernel_qff_forward(
 	if (b>= B) return;
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
-    const float freq = powf(2.0, freq_base);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
     features += f*2*Rs*C + s*Rs*C;
 
@@ -413,19 +304,19 @@ __global__ void kernel_qff_forward(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
 	}
 	nlinear_interp<T, N_POS_DIMS, C>(features, R, sc, outputs, b, f*2*C + s*C);
 }
 
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_backward_features(
-	const uint32_t B, 
-	const uint32_t F, 
+__global__ void kernel_ppng_3_backward_features(
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -436,8 +327,8 @@ __global__ void kernel_qff_backward_features(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
-    const float freq = powf(2.0, freq_base);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
     grad_features += f*2*C*Rs + s*C*Rs;
@@ -447,18 +338,18 @@ __global__ void kernel_qff_backward_features(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
 	}
 	grad_nlinear_interp<GRAD_T, T, N_POS_DIMS, C>(grad_features, R, sc, grad_output, b, f*2*C + s*C);
 }
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_backward_input(
-	const uint32_t B, 
-	const uint32_t F, 
+__global__ void kernel_ppng_3_backward_input(
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -470,8 +361,8 @@ __global__ void kernel_qff_backward_input(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
-    const float freq = powf(2.0, freq_base);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
 	// grad_points += b*N_POS_DIMS;
@@ -483,8 +374,8 @@ __global__ void kernel_qff_backward_input(
 	TCNN_PRAGMA_UNROLL
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
-		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq;
 	}
 
 	grad_point_helper<T, N_POS_DIMS, C>(grad_points, features, R, sc, dsc, grad_output, b, f*2*C + s*C);
@@ -494,12 +385,12 @@ __global__ void kernel_qff_backward_input(
 
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_backward_input_backward(
-	const uint32_t B, 
-	const uint32_t F, 
+__global__ void kernel_ppng_3_backward_input_backward(
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -513,8 +404,8 @@ __global__ void kernel_qff_backward_input_backward(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
-    const float freq = powf(2.0, freq_base);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
     features += f*2*C*Rs + s*C*Rs;
@@ -529,8 +420,8 @@ __global__ void kernel_qff_backward_input_backward(
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
 		float dp = grad_grad_points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
-		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq;
 		dps[i] = dp;
 	}
 
@@ -538,12 +429,12 @@ __global__ void kernel_qff_backward_input_backward(
 }
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_backward_input_backward_input(
-	const uint32_t B, 
-	const uint32_t F, 
+__global__ void kernel_ppng_3_backward_input_backward_input(
+	const uint32_t B,
+	const uint32_t F,
     const uint32_t R,
-    const uint32_t min_log2_freq, 
-    const uint32_t max_log2_freq, 
+    const int32_t min_log2_freq,
+    const int32_t max_log2_freq,
     const uint32_t P,
 	MatrixView<const T> grad_output,
     MatrixView<const float> points,      // Bx3
@@ -556,8 +447,8 @@ __global__ void kernel_qff_backward_input_backward_input(
     const uint32_t f = blockIdx.y;
     const uint32_t s = blockIdx.z;
 
-	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1));
-    const float freq = powf(2.0, freq_base);
+	const float freq_base = ((float)(f * (max_log2_freq - min_log2_freq))) / ((float) (F - 1)) + min_log2_freq;
+    const float freq = powf(2.0, freq_base) * 3.1415926535;
     const uint32_t Rs = powu(R, N_POS_DIMS);
 
 	grad2_points += b*N_POS_DIMS;
@@ -572,45 +463,33 @@ __global__ void kernel_qff_backward_input_backward_input(
 	for(int i = 0; i < N_POS_DIMS; i++){
 		float p = points(i, b);
 		float dp = grad_grad_points(i, b);
-		sc[i] = (s == 0) ? __sinf(freq * p) : __cosf(freq * p);
-		dsc[i] = ((s == 0) ? __cosf(freq * p) : -__sinf(freq * p)) * freq;
-		ddsc[i] = ((s == 0) ? -__sinf(freq * p) : -__cosf(freq * p)) * freq * freq;
+		sc[i] = sinf(freq * (p - 0.5) + s * M_HI);
+		dsc[i] = cosf(freq * (p - 0.5) + s * M_HI) * freq;
+		ddsc[i] = -sinf(freq * (p - 0.5) + s * M_HI) * freq * freq;
 		dps[i] = dp;
 	}
 
     grad2_points_helper<T, N_POS_DIMS, C>(features, grad2_points, R, sc, dsc, ddsc, dps, grad_output, b, f*2*C + s*C);
 }
 
-
-template <typename T>
-class QFF: public Encoding<T> {
-public:
-	virtual uint32_t n_pos_dims() const = 0;
-	virtual uint32_t n_features() const = 0;
-};
-
-template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-class QFFTemplated : public QFF<T> {
+template <typename T, uint32_t D, uint32_t C>
+class PPNG3: public PPNG<T, D, C, 1> {
 #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
 	using grad_t = std::conditional_t<C == 1, float, T>;
 #else
 	using grad_t = float;
 #endif
 public:
-	QFFTemplated(uint32_t log2_min_freq,
-				 uint32_t log2_max_freq,
-				 uint32_t n_quants,
-				 uint32_t n_frequencies)
-	: m_log2_min_freq{log2_min_freq}, 
-	  m_log2_max_freq{log2_max_freq}, 
-	  m_n_quants{n_quants}, 
-	  m_n_frequencies{n_frequencies} 
+	PPNG3(int32_t log2_min_freq,
+		 int32_t log2_max_freq,
+		 uint32_t n_quants,
+		 uint32_t n_frequencies)
+	: PPNG<T, D, C, 1>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
 	{
-		m_n_output_dims = m_n_frequencies * 2 * C;
-		if (N_POS_DIMS == 2){
-			m_n_params = n_quants * n_quants * 2 * m_n_frequencies * C;
+		if (D == 2){
+			this->m_n_params = n_quants * n_quants * 2 * this->m_n_frequencies * C;
 		} else{
-			m_n_params = n_quants * n_quants * n_quants * 2 * m_n_frequencies * C;
+			this->m_n_params = n_quants * n_quants * n_quants * 2 * this->m_n_frequencies * C;
 		}
 	}
 
@@ -621,25 +500,25 @@ public:
 		bool use_inference_params = false,
 		bool prepare_input_gradients = false
 	) override {
-		auto forward = std::make_unique<ForwardContext>();
+		auto forward = std::make_unique<Context>();
 
-		if ((!output && !prepare_input_gradients) || padded_output_width() == 0) {
+		if ((!output && !prepare_input_gradients) || this->padded_output_width() == 0) {
 			return forward;
 		}
 
 		// if (prepare_input_gradients) {
-		// 	forward->dy_dx = GPUMatrix<float>{N_POS_DIMS * m_n_frequencies * C, input.n(), stream};
+		// 	forward->dy_dx = GPUMatrix<float>{D * this->m_n_frequencies * C, input.n(), stream};
 		// }
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
-		kernel_qff_forward<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		kernel_ppng_3_forward<T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
-			m_n_frequencies, // F
-			m_n_quants, // Q
-			m_log2_min_freq, // I
-			m_log2_max_freq, // X
-			m_n_to_pad, // P
+			this->m_n_frequencies, // F
+			this->m_n_quants, // Q
+			this->m_log2_min_freq, // I
+			this->m_log2_max_freq, // X
+			this->m_n_to_pad, // P
 			input.view(),
 			use_inference_params ? this->inference_params() : this->params(),
 			output->view()
@@ -656,50 +535,50 @@ public:
 		const GPUMatrixDynamic<T>& dL_doutput,
 		GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_params = false,
-		EGradientMode param_gradients_mode = EGradientMode::Overwrite
+		GradientMode param_gradients_mode = GradientMode::Overwrite
 	) override {
         const uint32_t num_elements = input.n();
-        if ((!dL_dinput && param_gradients_mode == EGradientMode::Ignore) || padded_output_width() == 0 || num_elements == 0) {
+        if ((!dL_dinput && param_gradients_mode == GradientMode::Ignore) || this->padded_output_width() == 0 || num_elements == 0) {
 			return;
 		}
 
-		const auto& forward = dynamic_cast<const ForwardContext&>(ctx);
+		// const auto& forward = dynamic_cast<const Context&>(ctx);
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
 
 
         // If not, accumulate in a temporary buffer and cast later.
-		if(param_gradients_mode != EGradientMode::Ignore){
+		if(param_gradients_mode != GradientMode::Ignore){
 			grad_t * grad_array;
 			GPUMemoryArena::Allocation grad_array_tmp;
 			if (!std::is_same<grad_t, T>::value) {
-				grad_array_tmp = allocate_workspace(stream, m_n_params * sizeof(grad_t));
+				grad_array_tmp = allocate_workspace(stream, this->m_n_params * sizeof(grad_t));
 				grad_array = (grad_t*)grad_array_tmp.data();
 			} else {
 				grad_array = (grad_t*)this->gradients();
 			}
 
 
-			if (param_gradients_mode == EGradientMode::Overwrite) {
-				CUDA_CHECK_THROW(cudaMemsetAsync(grad_array, 0, m_n_params * sizeof(grad_t), stream));
+			if (param_gradients_mode == GradientMode::Overwrite) {
+				CUDA_CHECK_THROW(cudaMemsetAsync(grad_array, 0, this->m_n_params * sizeof(grad_t), stream));
 			}
 
 
-			kernel_qff_backward_features<grad_t, T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+			kernel_ppng_3_backward_features<grad_t, T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 				input.n(), // B
-				m_n_frequencies, // F
-				m_n_quants, // Q
-				m_log2_min_freq, // I
-				m_log2_max_freq, // X
-				m_n_to_pad, // P
+				this->m_n_frequencies, // F
+				this->m_n_quants, // Q
+				this->m_log2_min_freq, // I
+				this->m_log2_max_freq, // X
+				this->m_n_to_pad, // P
 				dL_doutput.view(),
 				input.view(),
-				grad_array 
+				grad_array
 			);
 
 			if (!std::is_same<grad_t, T>::value) {
-				parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=grad_array] __device__ (size_t i) {
+				parallel_for_gpu(stream, this->n_params(), [grad=this->gradients(), grad_tmp=grad_array] __device__ (size_t i) {
 					grad[i] = (T)grad_tmp[i];
 				});
 			}
@@ -708,18 +587,18 @@ public:
 			return;
 		}
 		parallel_for_gpu(stream, input.n(), [ddl=dL_dinput->view()] __device__ (size_t j) {
-			for(uint32_t i = 0; i < N_POS_DIMS; i++){
+			for(uint32_t i = 0; i < D; i++){
 				ddl(i, j) = 0;
 			}
 		});
 
-		kernel_qff_backward_input<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+		kernel_ppng_3_backward_input<T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
-			m_n_frequencies, // F
-			m_n_quants, // Q
-			m_log2_min_freq, // I
-			m_log2_max_freq, // X
-			m_n_to_pad, // P
+			this->m_n_frequencies, // F
+			this->m_n_quants, // Q
+			this->m_log2_min_freq, // I
+			this->m_log2_max_freq, // X
+			this->m_n_to_pad, // P
 			dL_doutput.view(),
 			input.view(),
 			dL_dinput->view(),
@@ -739,37 +618,37 @@ public:
 		GPUMatrixDynamic<T>* dL_ddLdoutput = nullptr,
 		GPUMatrixDynamic<float>* dL_dinput = nullptr,
 		bool use_inference_params = false,
-		EGradientMode param_gradients_mode = EGradientMode::Overwrite
+		GradientMode param_gradients_mode = GradientMode::Overwrite
 	) override {
         const uint32_t num_elements = input.n();
-		if ((!dL_ddLdoutput && param_gradients_mode == EGradientMode::Ignore) || padded_output_width() == 0 || num_elements == 0) {
+		if ((!dL_ddLdoutput && param_gradients_mode == GradientMode::Ignore) || this->padded_output_width() == 0 || num_elements == 0) {
 			return;
 		}
 		grad_t * grad_grad_array;
 		GPUMemoryArena::Allocation grad_array_tmp;
 		if (!std::is_same<grad_t, T>::value) {
 
-			grad_array_tmp = allocate_workspace(stream, m_n_params * sizeof(grad_t));
+			grad_array_tmp = allocate_workspace(stream, this->m_n_params * sizeof(grad_t));
 			grad_grad_array = (grad_t*)grad_array_tmp.data();
 		} else {
 			grad_grad_array = (grad_t*)this->gradients();
 		}
 
 
-        if (param_gradients_mode == EGradientMode::Overwrite) {
-            CUDA_CHECK_THROW(cudaMemsetAsync(grad_grad_array, 0, m_n_params * sizeof(grad_t), stream));
+        if (param_gradients_mode == GradientMode::Overwrite) {
+            CUDA_CHECK_THROW(cudaMemsetAsync(grad_grad_array, 0, this->m_n_params * sizeof(grad_t), stream));
         }
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
-		kernel_qff_backward_input_backward<grad_t, T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		kernel_ppng_3_backward_input_backward<grad_t, T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
-			m_n_frequencies, // F
-			m_n_quants, // Q
-			m_log2_min_freq, // I
-			m_log2_max_freq, // X
-			m_n_to_pad, // P
-			
+			this->m_n_frequencies, // F
+			this->m_n_quants, // Q
+			this->m_log2_min_freq, // I
+			this->m_log2_max_freq, // X
+			this->m_n_to_pad, // P
+
 			dL_doutput.view(),
 			input.view(),
 			dL_ddLdinput.view(),
@@ -778,9 +657,9 @@ public:
 			dL_ddLdoutput->view()
         );
 		if (!std::is_same<float, T>::value) {
-			parallel_for_gpu(stream, n_params(), [grad=this->gradients(), grad_tmp=grad_grad_array] __device__ (size_t i) {
+			parallel_for_gpu(stream, this->n_params(), [grad=this->gradients(), grad_tmp=grad_grad_array] __device__ (size_t i) {
 				// NOTE: maybe clip gradient since dy/dx__df can be very large?
-				// grad[i] = (T)min(max(grad_tmp[i], -511.5f), 511.5f);
+				// grad[i] = (T)std::min(std::max(grad_tmp[i], -511.5f), 511.5f);
 				grad[i] = (T)grad_tmp[i];
 			});
 		}
@@ -788,15 +667,15 @@ public:
 		// compute the gradients for the poses
 		if (dL_dinput)
 		{
-			const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), m_n_frequencies, 2};
-			kernel_qff_backward_input_backward_input<T, N_POS_DIMS, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+			const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+			kernel_ppng_3_backward_input_backward_input<T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 				input.n(), // B
-				m_n_frequencies, // F
-				m_n_quants, // Q
-				m_log2_min_freq, // I
-				m_log2_max_freq, // X
-				m_n_to_pad, // P
-				
+				this->m_n_frequencies, // F
+				this->m_n_quants, // Q
+				this->m_log2_min_freq, // I
+				this->m_log2_max_freq, // X
+				this->m_n_to_pad, // P
+
 				dL_doutput.view(),
 				input.view(),
 				dL_ddLdinput.view(),
@@ -807,107 +686,39 @@ public:
 		}
 	}
 
-	uint32_t input_width() const override {
-		return N_POS_DIMS;
+	std::string otype() const override {
+		return "PPNG3";
 	}
-
-	uint32_t padded_output_width() const override {
-		return m_n_output_dims + m_n_to_pad;
-	}
-
-	uint32_t output_width() const override {
-		return padded_output_width();
-	}
-
-	uint32_t required_input_alignment() const override {
-		return 1;
-	}
-
-	void set_padded_output_width(uint32_t padded_output_width) override {
-		CHECK_THROW(padded_output_width >= m_n_output_dims);
-		m_n_to_pad = padded_output_width - m_n_output_dims;
-	}
-    void set_params_impl(T* params, T* inference_params, T* gradients) override { }
-
-	void initialize_params(pcg32& rnd, float* params_full_precision, float scale = 1) override {
-		// Initialize the hashgrid from the GPU, because the number of parameters can be quite large.
-		generate_random_uniform<float>(rnd, n_params(), params_full_precision, -1e-4f * scale, 1e-4f * scale);
-	}
-    size_t n_params() const override {
-		return m_n_params;
-	}
-
-	uint32_t n_pos_dims() const override {
-		return N_POS_DIMS;
-	}
-
-	uint32_t n_features() const override {
-		return C;
-	}
-
-	uint32_t required_output_alignment() const override {
-		return 1;
-	}
-
-	MatrixLayout preferred_output_layout() const override {
-		return AoS;
-	}
-
-	json hyperparams() const override {
-		return {
-			{"otype", "QFF"},
-			{"n_frequencies", m_n_frequencies},
-			{"log2_min_freq", m_log2_min_freq},
-			{"log2_max_freq", m_log2_max_freq},
-			{"n_quants", m_n_quants},
-			{"n_features_per_level", C}
-		};
-	}
-
-private:
-	struct ForwardContext : public Context {
-		// GPUMatrix<float, RM> dy_dx;
-	};
-
-	uint32_t m_n_frequencies;
-	uint32_t m_n_quants;
-	uint32_t m_log2_min_freq;
-	uint32_t m_log2_max_freq;
-
-	// derived sizes
-	uint32_t m_n_params;
-	uint32_t m_n_output_dims;
-	uint32_t m_n_to_pad = 0;
 };
 
 
-template <typename T, uint32_t N_POS_DIMS>
-QFF<T>* create_qff_encoding_1(const json& encoding) {
+template <typename T, uint32_t D>
+Encoding<T>* create_ppng_3_encoding_by_feats(const json& encoding) {
 
-#define TCNN_QFF_PARAMS \
-	encoding.value("log2_min_freq", 0u), \
-	encoding.value("log2_max_freq", 6u), \
+#define TCNN_PPNG_PARAMS \
+	encoding.value("log2_min_freq", 0), \
+	encoding.value("log2_max_freq", 6), \
 	encoding.value("n_quants", 64u), \
 	encoding.value("n_frequencies", 6u), \
 
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		case 1: return new QFFTemplated<T, N_POS_DIMS, 1>{ TCNN_QFF_PARAMS };
-		case 2: return new QFFTemplated<T, N_POS_DIMS, 2>{ TCNN_QFF_PARAMS };
-		case 4: return new QFFTemplated<T, N_POS_DIMS, 4>{ TCNN_QFF_PARAMS };
-		case 8: return new QFFTemplated<T, N_POS_DIMS, 8>{ TCNN_QFF_PARAMS };
-		default: throw std::runtime_error{"QFF: number of features must be 1, 2, 4 or 8"};
+		case 1: return new PPNG3<T, D, 1>{ TCNN_PPNG_PARAMS };
+		case 2: return new PPNG3<T, D, 2>{ TCNN_PPNG_PARAMS };
+		case 4: return new PPNG3<T, D, 4>{ TCNN_PPNG_PARAMS };
+		case 8: return new PPNG3<T, D, 8>{ TCNN_PPNG_PARAMS };
+		default: throw std::runtime_error{"PPNG: number of features must be 1, 2, 4 or 8"};
 	}
-#undef TCNN_QFF_PARAMS
+#undef TCNN_PPNG_PARAMS
 }
 
 template <typename T>
-QFF<T>* create_qff_encoding(uint32_t n_dims_to_encode, const json& encoding) {
+Encoding<T>* create_ppng_3_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
-		case 2: return create_qff_encoding_1<T, 2>(encoding);
-		case 3: return create_qff_encoding_1<T, 3>(encoding);
-		default: throw std::runtime_error{"QFF: number of input dims must be 2,3 or 4."};
+		// case 2: return create_ppng_3_encoding_by_feats<T, 2>(encoding);
+		case 3: return create_ppng_3_encoding_by_feats<T, 3>(encoding);
+		default: throw std::runtime_error{"PPNG: number of input dims must be 2,3 or 4."};
 	}
 }
 
-TCNN_NAMESPACE_END
+}

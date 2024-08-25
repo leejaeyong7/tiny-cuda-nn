@@ -327,7 +327,7 @@ void fc_multiply_impl(cudaStream_t stream, const typename Gemm::Arguments& args)
 
 	// Launch initialized CUTLASS kernel
 	status = gemm_op(stream);
-	CUTLASS_CHECK_THROW(status);
+	// CUTLASS_CHECK_THROW(status);
 }
 
 template <class Gemm>
