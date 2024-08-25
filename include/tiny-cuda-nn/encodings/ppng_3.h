@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tiny-cuda-nn/encodings/qff.h>
+#include <tiny-cuda-nn/encodings/ppng.h>
 
 #include <numeric>
 #include <stdexcept>
@@ -279,7 +279,7 @@ __device__ void grad2_points_helper(
 
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_3_forward(
+__global__ void kernel_ppng_3_forward(
     const uint32_t B,
 	const uint32_t F,
     const uint32_t R,
@@ -311,7 +311,7 @@ __global__ void kernel_qff_3_forward(
 
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_3_backward_features(
+__global__ void kernel_ppng_3_backward_features(
 	const uint32_t B,
 	const uint32_t F,
     const uint32_t R,
@@ -344,7 +344,7 @@ __global__ void kernel_qff_3_backward_features(
 }
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_3_backward_input(
+__global__ void kernel_ppng_3_backward_input(
 	const uint32_t B,
 	const uint32_t F,
     const uint32_t R,
@@ -385,7 +385,7 @@ __global__ void kernel_qff_3_backward_input(
 
 
 template <typename GRAD_T, typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_3_backward_input_backward(
+__global__ void kernel_ppng_3_backward_input_backward(
 	const uint32_t B,
 	const uint32_t F,
     const uint32_t R,
@@ -429,7 +429,7 @@ __global__ void kernel_qff_3_backward_input_backward(
 }
 
 template <typename T, uint32_t N_POS_DIMS, uint32_t C>
-__global__ void kernel_qff_3_backward_input_backward_input(
+__global__ void kernel_ppng_3_backward_input_backward_input(
 	const uint32_t B,
 	const uint32_t F,
     const uint32_t R,
@@ -473,18 +473,18 @@ __global__ void kernel_qff_3_backward_input_backward_input(
 }
 
 template <typename T, uint32_t D, uint32_t C>
-class QFF3: public QFF<T, D, C, 1> {
+class PPNG3: public PPNG<T, D, C, 1> {
 #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
 	using grad_t = std::conditional_t<C == 1, float, T>;
 #else
 	using grad_t = float;
 #endif
 public:
-	QFF3(int32_t log2_min_freq,
+	PPNG3(int32_t log2_min_freq,
 		 int32_t log2_max_freq,
 		 uint32_t n_quants,
 		 uint32_t n_frequencies)
-	: QFF<T, D, C, 1>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
+	: PPNG<T, D, C, 1>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
 	{
 		if (D == 2){
 			this->m_n_params = n_quants * n_quants * 2 * this->m_n_frequencies * C;
@@ -511,8 +511,8 @@ public:
 		// }
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
-		kernel_qff_3_forward<T, D, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		kernel_ppng_3_forward<T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			this->m_n_frequencies, // F
 			this->m_n_quants, // Q
@@ -545,7 +545,7 @@ public:
 		// const auto& forward = dynamic_cast<const Context&>(ctx);
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
 
 
         // If not, accumulate in a temporary buffer and cast later.
@@ -565,7 +565,7 @@ public:
 			}
 
 
-			kernel_qff_3_backward_features<grad_t, T, D, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+			kernel_ppng_3_backward_features<grad_t, T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 				input.n(), // B
 				this->m_n_frequencies, // F
 				this->m_n_quants, // Q
@@ -592,7 +592,7 @@ public:
 			}
 		});
 
-		kernel_qff_3_backward_input<T, D, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+		kernel_ppng_3_backward_input<T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			this->m_n_frequencies, // F
 			this->m_n_quants, // Q
@@ -640,8 +640,8 @@ public:
         }
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
-		kernel_qff_3_backward_input_backward<grad_t, T, D, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		kernel_ppng_3_backward_input_backward<grad_t, T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			this->m_n_frequencies, // F
 			this->m_n_quants, // Q
@@ -667,8 +667,8 @@ public:
 		// compute the gradients for the poses
 		if (dL_dinput)
 		{
-			const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
-			kernel_qff_3_backward_input_backward_input<T, D, C><<<blocks_qff, N_THREADS, 0, stream>>>(
+			const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+			kernel_ppng_3_backward_input_backward_input<T, D, C><<<blocks_ppng, N_THREADS, 0, stream>>>(
 				input.n(), // B
 				this->m_n_frequencies, // F
 				this->m_n_quants, // Q
@@ -687,15 +687,15 @@ public:
 	}
 
 	std::string otype() const override {
-		return "QFF3";
+		return "PPNG3";
 	}
 };
 
 
 template <typename T, uint32_t D>
-Encoding<T>* create_qff_3_encoding_by_feats(const json& encoding) {
+Encoding<T>* create_ppng_3_encoding_by_feats(const json& encoding) {
 
-#define TCNN_QFF_PARAMS \
+#define TCNN_PPNG_PARAMS \
 	encoding.value("log2_min_freq", 0), \
 	encoding.value("log2_max_freq", 6), \
 	encoding.value("n_quants", 64u), \
@@ -703,21 +703,21 @@ Encoding<T>* create_qff_3_encoding_by_feats(const json& encoding) {
 
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		case 1: return new QFF3<T, D, 1>{ TCNN_QFF_PARAMS };
-		case 2: return new QFF3<T, D, 2>{ TCNN_QFF_PARAMS };
-		case 4: return new QFF3<T, D, 4>{ TCNN_QFF_PARAMS };
-		case 8: return new QFF3<T, D, 8>{ TCNN_QFF_PARAMS };
-		default: throw std::runtime_error{"QFF: number of features must be 1, 2, 4 or 8"};
+		case 1: return new PPNG3<T, D, 1>{ TCNN_PPNG_PARAMS };
+		case 2: return new PPNG3<T, D, 2>{ TCNN_PPNG_PARAMS };
+		case 4: return new PPNG3<T, D, 4>{ TCNN_PPNG_PARAMS };
+		case 8: return new PPNG3<T, D, 8>{ TCNN_PPNG_PARAMS };
+		default: throw std::runtime_error{"PPNG: number of features must be 1, 2, 4 or 8"};
 	}
-#undef TCNN_QFF_PARAMS
+#undef TCNN_PPNG_PARAMS
 }
 
 template <typename T>
-Encoding<T>* create_qff_3_encoding(uint32_t n_dims_to_encode, const json& encoding) {
+Encoding<T>* create_ppng_3_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
-		// case 2: return create_qff_3_encoding_by_feats<T, 2>(encoding);
-		case 3: return create_qff_3_encoding_by_feats<T, 3>(encoding);
-		default: throw std::runtime_error{"QFF: number of input dims must be 2,3 or 4."};
+		// case 2: return create_ppng_3_encoding_by_feats<T, 2>(encoding);
+		case 3: return create_ppng_3_encoding_by_feats<T, 3>(encoding);
+		default: throw std::runtime_error{"PPNG: number of input dims must be 2,3 or 4."};
 	}
 }
 

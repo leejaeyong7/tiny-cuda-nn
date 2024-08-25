@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tiny-cuda-nn/encodings/qff.h>
+#include <tiny-cuda-nn/encodings/ppng.h>
 
 #include <numeric>
 #include <stdexcept>
@@ -145,7 +145,7 @@ __device__ void grad_linear_interp(
 
 
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
-__global__ void kernel_qff_1_forward(
+__global__ void kernel_ppng_1_forward(
     const uint32_t B, // batch size
 	const uint32_t F, // freq size
     const uint32_t Q, // quantization size
@@ -176,7 +176,7 @@ __global__ void kernel_qff_1_forward(
 	linear_interp<T, D, C, R>(features, Q, sc, outputs, b, f*2*C + s*C);
 }
 template <typename GRAD_T, typename T, uint32_t D, uint32_t C, uint32_t R>
-__global__ void kernel_qff_1_backward(
+__global__ void kernel_ppng_1_backward(
     const uint32_t B, // batch size
 	const uint32_t F, // freq size
     const uint32_t Q, // quantization size
@@ -212,25 +212,25 @@ __global__ void kernel_qff_1_backward(
 /////////////////////
 // Class definition
 /**
- * @brief QFF1 encoding for ND inputs.
+ * @brief PPNG1 encoding for ND inputs.
  * T: float or double
  * D: number of dimensions to encode (2 or 3)
  * C: number of features per frequency (1, 2, 4 or 8)
  * R: number of correlations per level (1, 2, 4 or 8) (Rank)
  */
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
-class QFF1 : public QFF<T, D, C, R> {
+class PPNG1 : public PPNG<T, D, C, R> {
 #if TCNN_MIN_GPU_ARCH >= 62 || TCNN_MIN_GPU_ARCH == 60
 	using grad_t = std::conditional_t<R == 1, float, T>;
 #else
 	using grad_t = float;
 #endif
 public:
-	QFF1(int32_t log2_min_freq,
+	PPNG1(int32_t log2_min_freq,
 		 int32_t log2_max_freq,
 		 uint32_t n_quants,
 		 uint32_t n_frequencies)
-	: QFF<T, D, C, R>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
+	: PPNG<T, D, C, R>(log2_min_freq, log2_max_freq, n_quants, n_frequencies)
 	{
 		this->m_n_params = this->m_n_frequencies * 2 * D * C * n_quants * R;
 	}
@@ -249,8 +249,8 @@ public:
 		}
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
-		kernel_qff_1_forward<T, D, C, R><<<blocks_qff, N_THREADS, 0, stream>>>(
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		kernel_ppng_1_forward<T, D, C, R><<<blocks_ppng, N_THREADS, 0, stream>>>(
 			input.n(), // B
 			this->m_n_frequencies, // F
 			this->m_n_quants, // Q
@@ -281,7 +281,7 @@ public:
 		}
 
 		static constexpr uint32_t N_THREADS = 512;
-		const dim3 blocks_qff = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
+		const dim3 blocks_ppng = { div_round_up(input.n(), N_THREADS), this->m_n_frequencies, 2};
 
 
         // If not, accumulate in a temporary buffer and cast later.
@@ -301,7 +301,7 @@ public:
 			}
 
 
-			kernel_qff_1_backward<grad_t, T, D, C, R><<<blocks_qff, N_THREADS, 0, stream>>>(
+			kernel_ppng_1_backward<grad_t, T, D, C, R><<<blocks_ppng, N_THREADS, 0, stream>>>(
 				input.n(), // B
 				this->m_n_frequencies, // F
 				this->m_n_quants, // Q
@@ -327,7 +327,7 @@ public:
 	}
 
 	std::string otype() const override {
-		return "QFF1";
+		return "PPNG1";
 	}
 };
 
@@ -335,9 +335,9 @@ public:
 // Templating
 
 template <typename T, uint32_t D, uint32_t C>
-Encoding<T>* create_qff_1_encoding_with_dim_and_feat(const json& encoding) {
+Encoding<T>* create_ppng_1_encoding_with_dim_and_feat(const json& encoding) {
 
-#define TCNN_QFF_PARAMS \
+#define TCNN_PPNG_PARAMS \
 	encoding.value("log2_min_freq", 0), \
 	encoding.value("log2_max_freq", 6), \
 	encoding.value("n_quants", 64u), \
@@ -346,34 +346,34 @@ Encoding<T>* create_qff_1_encoding_with_dim_and_feat(const json& encoding) {
 	const uint32_t n_corrs = encoding.value("rank", 4u);
 
 	switch (n_corrs) {
-		// case 1: return new QFF1<T, D, C, 1>{ TCNN_QFF_PARAMS };
-		case 2: return new QFF1<T, D, C, 2>{ TCNN_QFF_PARAMS };
-		case 4: return new QFF1<T, D, C, 4>{ TCNN_QFF_PARAMS };
-		case 8: return new QFF1<T, D, C, 8>{ TCNN_QFF_PARAMS };
-		case 16: return new QFF1<T, D, C, 16>{ TCNN_QFF_PARAMS };
-		default: throw std::runtime_error{"QFF1: rank must be 1, 2, 4, 8 or 16"};
+		// case 1: return new PPNG1<T, D, C, 1>{ TCNN_PPNG_PARAMS };
+		case 2: return new PPNG1<T, D, C, 2>{ TCNN_PPNG_PARAMS };
+		case 4: return new PPNG1<T, D, C, 4>{ TCNN_PPNG_PARAMS };
+		case 8: return new PPNG1<T, D, C, 8>{ TCNN_PPNG_PARAMS };
+		case 16: return new PPNG1<T, D, C, 16>{ TCNN_PPNG_PARAMS };
+		default: throw std::runtime_error{"PPNG1: rank must be 1, 2, 4, 8 or 16"};
 	}
-#undef TCNN_QFF_PARAMS
+#undef TCNN_PPNG_PARAMS
 }
 
 template <typename T, uint32_t D>
-Encoding<T>* create_qff_1_encoding_with_dim(const json& encoding) {
+Encoding<T>* create_ppng_1_encoding_with_dim(const json& encoding) {
 	const uint32_t n_feats = encoding.value("n_features", 4u);
 	switch (n_feats) {
-		// case 1: return create_qff_1_encoding_with_dim_and_feat<T, D, 1>(encoding);
-		case 2: return create_qff_1_encoding_with_dim_and_feat<T, D, 2>(encoding);
-		case 4: return create_qff_1_encoding_with_dim_and_feat<T, D, 4>(encoding);
-		case 8: return create_qff_1_encoding_with_dim_and_feat<T, D, 8>(encoding);
-		default: throw std::runtime_error{"QFF1: number of features must be 1, 2, 4 or 8"};
+		// case 1: return create_ppng_1_encoding_with_dim_and_feat<T, D, 1>(encoding);
+		case 2: return create_ppng_1_encoding_with_dim_and_feat<T, D, 2>(encoding);
+		case 4: return create_ppng_1_encoding_with_dim_and_feat<T, D, 4>(encoding);
+		case 8: return create_ppng_1_encoding_with_dim_and_feat<T, D, 8>(encoding);
+		default: throw std::runtime_error{"PPNG1: number of features must be 1, 2, 4 or 8"};
 	}
 }
 
 template <typename T>
-Encoding<T>* create_qff_1_encoding(uint32_t n_dims_to_encode, const json& encoding) {
+Encoding<T>* create_ppng_1_encoding(uint32_t n_dims_to_encode, const json& encoding) {
 	switch (n_dims_to_encode) {
-		// case 2: return create_qff_1_encoding_with_dim<T, 2>(encoding);
-		case 3: return create_qff_1_encoding_with_dim<T, 3>(encoding);
-		default: throw std::runtime_error{"QFF1: number of input dims must be 2 or 3"};
+		// case 2: return create_ppng_1_encoding_with_dim<T, 2>(encoding);
+		case 3: return create_ppng_1_encoding_with_dim<T, 3>(encoding);
+		default: throw std::runtime_error{"PPNG1: number of input dims must be 2 or 3"};
 	}
 }
 

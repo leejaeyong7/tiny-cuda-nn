@@ -20,16 +20,16 @@ struct ForwardContext : public Context {
 #define M_HI 1.57079632679489661923
 
 /**
- * @brief QFF1 encoding for ND inputs.
+ * @brief PPNG1 encoding for ND inputs.
  * T: float or double
  * D: number of dimensions to encode (2 or 3)
  * C: number of features per frequency (1, 2, 4 or 8)
  * R: number of correlations per level (1, 2, 4 or 8) (Rank)
  */
 template <typename T, uint32_t D, uint32_t C, uint32_t R>
-class QFF : public Encoding<T> {
+class PPNG : public Encoding<T> {
 public:
-	QFF(int32_t log2_min_freq,
+	PPNG(int32_t log2_min_freq,
 		int32_t log2_max_freq,
 		uint32_t n_quants,
 		uint32_t n_frequencies)

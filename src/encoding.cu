@@ -35,9 +35,9 @@
 #include <tiny-cuda-nn/encodings/grid.h>
 #include <tiny-cuda-nn/encodings/identity.h>
 #include <tiny-cuda-nn/encodings/oneblob.h>
-#include <tiny-cuda-nn/encodings/qff_3.h>
-#include <tiny-cuda-nn/encodings/qff_2.h>
-#include <tiny-cuda-nn/encodings/qff_1.h>
+#include <tiny-cuda-nn/encodings/ppng_3.h>
+#include <tiny-cuda-nn/encodings/ppng_2.h>
+#include <tiny-cuda-nn/encodings/ppng_1.h>
 #include <tiny-cuda-nn/encodings/spherical_harmonics.h>
 #include <tiny-cuda-nn/encodings/triangle_wave.h>
 
@@ -117,14 +117,14 @@ auto register_builtin_encodings() {
 	register_encoding<T>(factories, "OneBlobFrequency", nrc_factory);
 	register_encoding<T>(factories, "NRC", nrc_factory);
 
-	register_encoding<T>(factories, "QFF1", [](uint32_t n_dims_to_encode, const json& encoding) {
-		return create_qff_1_encoding<T>(n_dims_to_encode, encoding);
+	register_encoding<T>(factories, "PPNG1", [](uint32_t n_dims_to_encode, const json& encoding) {
+		return create_ppng_1_encoding<T>(n_dims_to_encode, encoding);
 	});
-	register_encoding<T>(factories, "QFF2", [](uint32_t n_dims_to_encode, const json& encoding) {
-		return create_qff_2_encoding<T>(n_dims_to_encode, encoding);
+	register_encoding<T>(factories, "PPNG2", [](uint32_t n_dims_to_encode, const json& encoding) {
+		return create_ppng_2_encoding<T>(n_dims_to_encode, encoding);
 	});
-	register_encoding<T>(factories, "QFF3", [](uint32_t n_dims_to_encode, const json& encoding) {
-		return create_qff_3_encoding<T>(n_dims_to_encode, encoding);
+	register_encoding<T>(factories, "PPNG3", [](uint32_t n_dims_to_encode, const json& encoding) {
+		return create_ppng_3_encoding<T>(n_dims_to_encode, encoding);
 	});
 
 	return factories;
