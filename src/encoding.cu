@@ -116,10 +116,6 @@ auto register_builtin_encodings() {
 	};
 	register_encoding<T>(factories, "OneBlobFrequency", nrc_factory);
 	register_encoding<T>(factories, "NRC", nrc_factory);
-	register_encoding<T>(factories, "QFF", [](uint32_t n_dims_to_encode, const json& encoding) {
-		return create_qff_encoding<T>(n_dims_to_encode, encoding);
-	});
-
 	register_encoding<T>(factories, "PPNG1", [](uint32_t n_dims_to_encode, const json& encoding) {
 		return create_ppng_1_encoding<T>(n_dims_to_encode, encoding);
 	});
